@@ -1,0 +1,2121 @@
+---
+title: "Bae's Theorem"
+author: "Michael Betancourt"
+date: "November 2024"
+date-format: "MMMM YYYY"
+toc: true
+number-sections: true
+highlight: pygments
+crossref:
+  lst-title: "Stan Program"
+filters:
+   - include-code-files
+format:
+  html:
+    html-math-method: katex
+    theme:
+      - lux
+      - custom.scss
+    standalone: true
+    embed-resources: true
+    code-overflow: wrap
+    linkcolor: "#B97C7C"
+  pdf:
+    keep-tex: true
+    fig-width: 4
+    fig-height: 4
+    code-overflow: wrap
+    monofontoptions:
+      - Scale=0.5
+knitr:
+  opts_chunk:
+    comment: ''
+    cache.lazy: FALSE
+  opts_knit:
+    global.par: TRUE
+format-links: false
+---
+
+In 2006 Netflix announced the infamous
+[Netflix Prize](https://web.archive.org/web/20200510213032/https://www.netflixprize.com/assets/rules.pdf).
+The competition challenged anyone to use a data set of customer movie
+reviews to inform predictions of a second, held-out set of customer
+movie reviews.  Superficially the Netflix challenge was a mixed success,
+although from a broader perspective it demonstrated the perils of
+poorly-chosen metrics for predictive performance and the subtleties of
+data privacy.  Wikipedia summarizes the
+[history](https://en.wikipedia.org/wiki/Netflix_Prize) well.
+
+Beyond the Netflix Prize itself the corresponding data set is a nice
+example of some of the problems that can arise in a wide range of
+practical applications.  For instance not only are customer preferences
+limited to five star ratings but also the interpretation of those
+ratings are ambiguous and typically not consistent across customers.
+Some customers are generous with their five star ratings while some are
+meager with not only their five star ratings but also their four star
+and sometimes even three star ratings.
+
+In addition to the idiosyncratic rating scales any analysis of this data
+also has to contend with idiosyncratic customer preferences.  Because
+not every customer will agree on the quality of a given movie we have to
+decide whether we want to try to learn an aggregate preference or the
+individual customer preferences.
+
+In this chapter I will develop a Bayesian analysis of a subset of the
+Netflix training data set, not in an attempt to win the Netflix Prize
+decades too late but rather to demonstrate some of these common analysis
+challenges.
+
+Importantly this analysis will not be the first time that Netflix has
+been associated with Bayesian inference.  In 2016 Amy Hogan
+(\@alittlestats) presented her influential
+[Bae's Theorem](https://twitter.com/alittlestats/status/664923862853922820),
+$$
+p( \text{chill} \mid \text{Netflix} )
+=
+\frac{ p( \text{Netflix} \mid \text{chill} ) \, p( \text{chill} ) }
+{ p( \text{Netflix} ) }.
+$$
+
+# Setup
+
+As always we begin by setting up our local `R` environment.
+
+```{r}
+#| echo: !expr knitr::is_html_output()
+#| eval: !expr knitr::is_html_output()
+par(family="serif", las=1, bty="l",
+    cex.axis=1, cex.lab=1, cex.main=1,
+    xaxs="i", yaxs="i", mar = c(5, 5, 3, 1))
+```
+
+```{r}
+#| echo: !expr knitr::is_latex_output()
+#| eval: !expr knitr::is_latex_output()
+par(family="serif", las=1, bty="l",
+    cex.axis=1, cex.lab=1, cex.main=1,
+    xaxs="i", yaxs="i", mar = c(5, 5, 3, 5))
+```
+
+```{r}
+#| warning: false
+#| message: false
+library(rstan)
+rstan_options(auto_write = TRUE)            # Cache compiled Stan programs
+options(mc.cores = parallel::detectCores()) # Parallelize chains
+parallel:::setDefaultClusterOptions(setup_strategy = "sequential")
+```
+
+```{r}
+util <- new.env()
+source('mcmc_analysis_tools_rstan.R', local=util)
+source('mcmc_visualization_tools.R', local=util)
+```
+
+# Data Exploration
+
+The full Netflix Prize training data set consisted of 100,480,507
+customer-movie pairs, each accompanied by an ordinal rating between one
+and five "stars", with one being the worst rating and five being the
+best.  The observed ratings spanned 480,189 anonymized customers and
+17,770 movies.
+
+To allow for a more manageable analysis I reduced the full data set by
+considering only the first 1000 movies and then randomly subsampling 100
+customers and 200 movies with probabilities proportional to the total
+number of ratings.  This left 2,415 total ratings.
+
+Finally to facilitate modeling and add another layer of anonymizing
+obfuscating I relabeled the selected customers and movies with
+contiguous indices.
+
+```{r}
+data <- read_rdump('data/ratings.data.R')
+
+cat(sprintf("%s Customers", data$N_customers))
+cat(sprintf("%s Movies", data$N_movies))
+cat(sprintf("%s Total Ratings", data$N_ratings))
+```
+
+Despite favoring customers with more ratings in the data subsampling
+most of the selected customers still rated only a few movies.  Overall
+the training data set is relatively sparse, with only a few customers
+contributing most of the ratings.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 2, 1))
+
+util$plot_line_hist(table(data$customer_idxs),
+                    -0.5, 95.5, 5,
+                    xlab="Number of Ratings Per Customer")
+```
+
+Similarly most of the selected movies have only a few ratings.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 2, 1))
+
+util$plot_line_hist(table(data$movie_idxs),
+                    -0.5, 55.5, 2,
+                    xlab="Number of Ratings Per Movie")
+```
+
+This sparsity is even more evident if we visualize the customer-movie
+pairings.
+
+```{r}
+xs <- seq(1, data$N_movies, 1)
+ys <- seq(1, data$N_customers, 1)
+zs <- matrix(0, nrow=data$N_movies, ncol=data$N_customers)
+
+for (n in 1:data$N_ratings) {
+  zs[data$movie_idxs[n], data$customer_idxs[n]] <- 1
+}
+
+par(mfrow=c(1, 1), mar = c(5, 5, 1, 1))
+
+image(xs, ys, zs, col=c("white", util$c_dark_teal),
+      xlab="Movie", ylab="Customer")
+```
+
+The observed ratings are slightly biased towards large values, with
+far more four star ratings than two star ratings.  From the data alone,
+however, we cannot determine whether or not this is because most movies
+that had been rated were really good or because most customers were
+just generous with their ratings.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 2, 1))
+
+util$plot_line_hist(data$ratings,
+                    -0.5, 6.5, 1, xlab="Ratings")
+```
+
+That said there is substantial heterogeneity in the ratings across
+customers.  Customer 70, for example, gave many high ratings while
+Customer 23 gave many low ratings.
+
+```{r}
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (c in c(7, 23, 40, 70, 77, 100)) {
+  util$plot_line_hist(data$ratings[data$customer_idxs == c],
+                      -0.5, 6.5, 1,
+                      xlab="Rating", main=paste('Customer', c))
+}
+
+```
+
+Similarly we see strong variation in the observed ratings across movies.
+Movies 117 and 180 are particularly well-reviewed.
+
+```{r}
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (m in c(33, 53, 61, 80, 117, 180)) {
+  util$plot_line_hist(data$ratings[data$movie_idxs == m],
+                      -0.5, 6.5, 1,
+                      xlab="Rating", main=paste('Movie', m))
+}
+```
+
+When critiquing any model of these ratings we want to be able to
+interrogate this variation in rating behavior across customers and
+movies.  Even with the subsampled data, however, a histogram of ratings
+for each customer and movie would be too ungainly.
+
+One alternative approach is to compute a scalar summary of the ratings
+within each group, and then construct a histogram of those
+**stratified** values.  For example we might consider histograms of
+empirical means stratified by customer or movie.
+
+```{r}
+par(mfrow=c(1, 2), mar=c(5, 5, 2, 1))
+
+mean_rating_customer <-
+  sapply(1:data$N_customers,
+         function(c) mean(data$ratings[data$customer_idxs == c]))
+util$plot_line_hist(mean_rating_customer,
+                    0, 6, 1,
+                    xlab="Customer-wise Average Ratings")
+
+
+mean_rating_movie <-
+  sapply(1:data$N_movies,
+         function(m) mean(data$ratings[data$movie_idxs == m]))
+util$plot_line_hist(mean_rating_movie,
+                    0, 6, 0.5,
+                    xlab="Movie-wise Average Ratings")
+```
+
+Of course an empirical mean captures only some of the rating behavior
+within each strata.  We can capture more with a summary that is
+sensitive to the dispersion of ratings in each strata, such as the
+empirical variance or empirical entropy.
+
+Here let's go with the empirical variance, or rather a modified
+empirical variance that defaults to zero when a strata consists of only
+one value.
+
+```{r}
+safe_var <- function(vals) {
+  if (length(vals) == 1)
+    (0)
+  else
+    (var(vals))
+}
+```
+
+```{r}
+par(mfrow=c(1, 2), mar=c(5, 5, 2, 1))
+
+var_rating_customer <-
+  sapply(1:data$N_customers,
+         function(c) safe_var(data$ratings[data$customer_idxs == c]))
+util$plot_line_hist(var_rating_customer,
+                    0, 5, 0.5,
+                    xlab="Customer-wise Rating Variances")
+
+var_rating_movie <-
+  sapply(1:data$N_movies,
+         function(m) safe_var(data$ratings[data$movie_idxs == m]))
+util$plot_line_hist(var_rating_movie,
+                    0, 5, 0.5,
+                    xlab="Movie-wise Rating Variances")
+```
+
+The main limitation with these stratified summary statistics is that
+they are sensitive to only the marginal variation across movies and
+customers.  In other words they are sensitive to heterogeneity across
+movies or customers but not heterogeneity across movies and customers
+_at the same time_.  Unfortunately because each customer-movie pair has
+at most one rating, and most have no ratings, we can't just stratify
+summary statistics by both customer and movie.
+
+One potential compromise is to construct empirical covariances for each
+pair of customers or movies.  For example the empirical covariance
+between two movies $m_{1}$ and $m_{2}$ is defined by
+$$
+\hat{\rho}_{m_{1} m_{2}}
+=
+\hat{\rho}_{m_{2} m_{1}}
+=
+\frac{1}{N_{C} - 1} \sum_{c = 1}^{N_{C}}
+(r_{c m_{1}} - \hat{\mu}_{m_{1}}) \cdot
+(r_{c m_{2}} - \hat{\mu}_{m_{2}})
+$$
+where $N_{C}$ is the number of customers, $r_{c m}$ is the rating given
+to movie $m$ by customer $c$, and
+$$
+\hat{\mu}_{m}
+=
+\frac{1}{N_{C}} \sum_{c = 1}^{N_{C}} r_{c m}.
+$$
+The immediate issue is that, because not every customer rates every
+movie, many of the $r_{c m}$ in these sums will be undefined.
+
+All we can do is limit the sums to the customers who have rated both
+movies.  More formally let $\mathsf{c}_{m}$ denote the set of customers
+who have rated movie $m$ and $N_{C, m}$ denote the number of elements in
+that set.  Similarly let $\mathsf{c}_{m_{1} m_{2}}$ denote the set of
+customers who have rated _both_ movies $m_{1}$ and $m_{2}$ with
+$N_{C, m_{1} m_{2}}$ the number of elements in that set.  Then we can
+define
+$$
+\hat{\rho}_{m_{1} m_{2}}
+=
+\hat{\rho}_{m_{2} m_{1}}
+=
+\frac{1}{N_{C, m_{1} m_{2}} - 1} \sum_{c \in \mathsf{c}_{m_{1} m_{2}}}
+(r_{c m_{1}} - \hat{\mu}_{m_{1}}) \cdot
+(r_{c m_{2}} - \hat{\mu}_{m_{2}})
+$$
+with
+$$
+\hat{\mu}_{m}
+=
+\frac{1}{N_{C, m}} \sum_{c \in \mathsf{c}_{m}} r_{c m}
+$$
+the movie-wise empirical means that we've already constructed.
+
+All of this said given the relative sparsity of the observed ratings the
+set $\mathsf{c}_{m_{1} m_{2}}$ will be empty for most pairs of movies.
+Even fewer pairs of movies will have the $N_{C, m_{1} m_{2}} > 1$ needed
+for $\hat{\rho}_{m_{1} m_{2}}$ to be well-defined, let alone
+$N_{C, m_{1} m_{2}}$ large enough for $\hat{\rho}_{m_{1} m_{2}}$ to
+provide an informative summary.
+
+We can avoid any ill-defined or poorly informative empirical covariances
+by including only those movie pairs with $N_{C, m_{1} m_{2}}$
+sufficiently large enough in the final histogram.  This also has the
+added benefit of reducing the total number of summaries that we have
+to bin into the final histogram visualization.  Here I will require
+$N_{C, m_{1} m_{2}} > 7$.
+
+Now that we've carefully laid out the math the implementation is
+relatively straightforward.  First we loop over the observed ratings
+twice, incrementing the partial sums for each pair of movies when
+appropriate.  This gives us
+$$
+\hat{\Sigma}_{m_{1} m_{2}}
+=
+\sum_{c \in \mathsf{c}_{m_{1} m_{2}}}
+(r_{c m_{1}} - \hat{\mu}_{m_{1}}) \cdot
+(r_{c m_{2}} - \hat{\mu}_{m_{2}})
+$$
+and
+$$
+N_{C, m_{1} m_{2}}
+=
+\sum_{c \in \mathsf{c}_{m_{1} m_{2}}} 1.
+$$
+
+```{r}
+covar_rating_movie <- matrix(0,
+                             nrow=data$N_movies,
+                             ncol=data$N_movies)
+movie_pair_counts <- matrix(0,
+                            nrow=data$N_movies,
+                            ncol=data$N_movies)
+
+for (n1 in 1:data$N_ratings) {
+  for (n2 in 1:data$N_ratings) {
+    if (data$customer_idxs[n1] == data$customer_idxs[n2]) {
+      m1 <- data$movie_idxs[n1]
+      m2 <- data$movie_idxs[n2]
+      y <- (data$ratings[n1] - mean_rating_movie[m1]) *
+           (data$ratings[n2] - mean_rating_movie[m2])
+      covar_rating_movie[m1, m2] <- covar_rating_movie[m1, m2] + y
+      covar_rating_movie[m2, m1] <- covar_rating_movie[m2, m1] + y
+      movie_pair_counts[m1, m2] <- movie_pair_counts[m1, m2] + 1
+      movie_pair_counts[m2, m1] <- movie_pair_counts[m2, m1] + 1
+    }
+  }
+}
+```
+
+Next we compute
+$$
+\hat{\rho}_{m_{1} m_{2}}
+=
+\frac{ \hat{\Sigma}_{m_{1} m_{2}} }{ N_{C, m_{1} m_{2}} }
+$$
+for each pair of movies where $N_{C, m_{1} m_{2}}$ is larger than $7$.
+
+```{r}
+m_pairs <- list()
+covar_rating_movie_filt <- c()
+
+for (m1 in 2:data$N_movies) {
+  for (m2 in 1:(m1 - 1)) {
+    if (movie_pair_counts[m1, m2] > 7) {
+      m_pairs[[length(m_pairs) + 1]] <- c(m1, m2)
+      covar_rating_movie_filt <- c(covar_rating_movie_filt,
+                                   covar_rating_movie[m1, m2] /
+                                     (movie_pair_counts[m1, m2] - 1))
+    }
+  }
+}
+```
+
+Finally we bin these values into a histogram that visualizes the range
+of these partial empirical covariance behaviors.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 2, 1))
+
+util$plot_line_hist(covar_rating_movie_filt,
+                    -4, 4, 0.25,
+                    xlab="Movie-wise Rating Covariances")
+```
+
+In order to construct posterior retrodictive checks later on we will
+need to select the posterior predictive values for these same selected
+movie pairs.  We might as well construct the appropriate variable names
+now and have them ready.
+
+```{r}
+covar_rating_movie_filt_names <-
+  sapply(m_pairs,
+         function(p) paste0('covar_rating_movie_pred[',
+                            p[1], ',', p[2], ']'))
+```
+
+All of this said I think that there is still a lot of opportunity for
+better summary statistics in applications like these.
+
+# Homogeneous Customer Model
+
+Now that we've familiarized ourselves with the data we can make our
+first attempt at modeling the data generating process that, well,
+generated it.
+
+First and foremost we need to account for both the ordering and
+discreteness of the five star rating system.  Fortunately this is
+straightforward with the latent cut point construction that I discuss
+in my
+[chapter on ordinal modeling](https://betanalpha.github.io/assets/case_studies/ordinal_regression.html). At the same time we can use the induced
+Dirichlet prior model to avoid any unreasonable behavior in those cut
+points.
+
+We can then model the consumer preference for each movie with a separate
+affinity parameter that shifts the latent probability density function
+relative to the fixed cut points, and hence the induced probabilities
+for each rating.  Note that we can interpret this construction as a
+bipartide
+[pair-wise comparison model](https://betanalpha.github.io/assets/chapters_html/pairwise_comparison_modeling.html)
+that contrasts the austerity of customers to the quality of each movie.
+
+The subtlety with this interpretation is that the customer austerity is
+not a separate parameter but rather implicit in the translation freedom
+of the cut points.  Setting the anchor point in the induced Dirichlet
+prior model to zero effectively removes this translation freedom and
+centers the customer austerity around zero.
+
+Initially we will assume that the customer behavior is homogeneous so
+that we need only a single set of cut points.  On the other hand each
+movie needs to be modeled with a distinct affinity parameter.
+
+Instead of modeling those parameters independently we will assume that
+our domain expertise about the movies is exchangeable so that we can
+model with hierarchically.  To avoid degeneracy in the pair-wise
+comparisons we will need to anchor the population location to zero, the
+same anchor location used in the induced Dirichlet prior model.  Finally
+we will begin with a monolithic non-centered parameterization given the
+sparsity of observed ratings.
+
+```{.stan include="stan_programs/model1.stan" filename="model1.stan"}
+```
+
+```{r}
+#| warning: false
+#| message: false
+#| cache: true
+fit <- stan(file="stan_programs/model1.stan",
+            data=data, seed=8438338,
+            warmup=1000, iter=2024, refresh=0)
+```
+
+Despite the initial model complexity there are no diagnostic issues
+indicating suspect computation.
+
+```{r}
+diagnostics <- util$extract_hmc_diagnostics(fit)
+util$check_all_hmc_diagnostics(diagnostics)
+
+samples1 <- util$extract_expectand_vals(fit)
+base_samples <- util$filter_expectands(samples1,
+                                       c('gamma_ncp',
+                                         'tau_gamma',
+                                         'cut_points'),
+                                       check_arrays=TRUE)
+util$check_all_expectand_diagnostics(base_samples)
+```
+
+Consequently we're ready to investigate this model's retrodictive
+performance.
+
+The model appears to be flexible enough to capture the behavior of the
+aggregate ratings.
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples1, 'rating_pred', -0.5, 6.5, 1,
+                         baseline_values=data$ratings,
+                         xlab="All Ratings")
+```
+
+On the other hand the retrodictive performance is much worse if we look
+at individual customer behaviors.  In particular there is much more
+heterogeneity in the observed data than what the model can reproduce,
+which makes sense given that we explicitly assumed homogeneous customer
+behavior.
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (c in c(7, 23, 40, 70, 77, 100)) {
+  names <- sapply(which(data$customer_idxs == c),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples1, names)
+
+  customer_ratings <- data$ratings[data$customer_idxs == c]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=customer_ratings,
+                           xlab="Ratings",
+                           main=paste('Customer', c))
+}
+```
+
+On the other hand the model doesn't seem to have a problem capturing
+the heterogeneity in the observed ratings across movies, at least for
+this quick spot check.
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (m in c(33, 53, 61, 80, 117, 180)) {
+  names <- sapply(which(data$movie_idxs == m),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples1, names)
+
+  movie_ratings <- data$ratings[data$movie_idxs == m]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=movie_ratings,
+                           xlab="Ratings",
+                           main=paste('Movie', m))
+}
+```
+
+To really investigate the variation in retrodictive performance,
+however, we need to look beyond just a few customers and movies.
+Instead we can examine the behavior of all customers and movies at the
+same time with histograms of stratified summary statistics.
+
+Here we see that the posterior predictive behavior of the customer-wise
+means are more narrowly distributed than what we see in the observed
+data.  At the same time the posterior predictive customer-wise variances
+concentrate at larger values than the observed customer-wise variances.
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 2), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples1, 'mean_rating_customer_pred',
+                         0, 6, 0.5,
+                         baseline_values=mean_rating_customer,
+                         xlab="Customer-wise Average Ratings")
+
+util$plot_hist_quantiles(samples1, 'mean_rating_movie_pred',
+                         0, 6, 0.6,
+                         baseline_values=mean_rating_movie,
+                         xlab="Movie-wise Average Ratings")
+
+util$plot_hist_quantiles(samples1, 'var_rating_customer_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_customer,
+                         xlab="Customer-wise Rating Variances")
+
+util$plot_hist_quantiles(samples1, 'var_rating_movie_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_movie,
+                         xlab="Movie-wise Rating Variances")
+```
+
+Finally the collection of selected movie covariances appears to be more
+heavy-tailed in the observed data relative to the posterior predictions.
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+filtered_samples <-
+  util$filter_expectands(samples1,
+                         covar_rating_movie_filt_names)
+
+util$plot_hist_quantiles(filtered_samples, 'covar_rating_movie_pred',
+                         -4.25, 4.25, 0.25,
+                         baseline_values=covar_rating_movie_filt,
+                         xlab="Filtered Movie-wise Rating Covariances")
+```
+
+# Independent, Heterogeneous Customer Model
+
+All of our retrodictive checks tell a consistent story -- customers do
+not rate movies the same way as each other.  Fortunately it's
+straightforward to just model each customer's idiosyncratic behavior
+with their own set of cut points.
+
+```{.stan include="stan_programs/model2.stan" filename="model2.stan"}
+```
+
+```{r}
+#| warning: false
+#| message: false
+#| cache: true
+fit <- stan(file="stan_programs/model2.stan",
+            data=data, seed=8438338,
+            warmup=1000, iter=2024, refresh=0)
+```
+
+Frustratingly the computation suffers from a few stray divergences.
+
+```{r}
+diagnostics <- util$extract_hmc_diagnostics(fit)
+util$check_all_hmc_diagnostics(diagnostics)
+
+samples2 <- util$extract_expectand_vals(fit)
+base_samples <- util$filter_expectands(samples2,
+                                       c('gamma_ncp',
+                                         'tau_gamma',
+                                         'cut_points'),
+                                       check_arrays=TRUE)
+util$check_all_expectand_diagnostics(base_samples)
+```
+
+One possibility is that the replicated cut points are messing with the
+hierarchical geometry of the movie affinities.  The movie affinities
+most susceptible to degenerate behavior in a non-centered
+parameterization are those with the most ratings, and those do not
+exhibit any obvious geometric pathologies.
+
+```{r}
+idxs <- as.numeric(names(tail(sort(table(data$movie_idxs)), 9)))
+names <- sapply(idxs, function(m) paste0('gamma[', m, ']'))
+util$plot_div_pairs(names, 'tau_gamma', samples2, diagnostics)
+```
+
+At this point we could spend some time investigating for any degenerate
+behavior between the cut points that could be causing problems, or even
+between some cut points and some movie affinities.  Given the small
+number of divergences, however, let's just run again with a less
+aggressive step size adaptation and cope with the increased
+computational cost.  We can always come back to this investigation later
+if this ends up being our final model.
+
+```{r}
+#| warning: false
+#| message: false
+#| cache: true
+fit <- stan(file="stan_programs/model2.stan",
+            data=data, seed=8438338,
+            warmup=1000, iter=2024, refresh=0,
+            control=list('adapt_delta'=0.9))
+```
+
+Fortunately that seems to have done the trick and now our diagnostics
+are squeaky clean.
+
+```{r}
+diagnostics <- util$extract_hmc_diagnostics(fit)
+util$check_all_hmc_diagnostics(diagnostics)
+
+samples2 <- util$extract_expectand_vals(fit)
+base_samples <- util$filter_expectands(samples2,
+                                       c('gamma_ncp',
+                                         'tau_gamma',
+                                         'cut_points'),
+                                       check_arrays=TRUE)
+util$check_all_expectand_diagnostics(base_samples)
+```
+
+Has our retrodictive performance improved?
+
+Interestingly the behavior of the aggregate ratings isn't quite as
+consistent between the observed data and posterior predictions as it
+was before.  That said the increased retrodictive tension isn't
+necessarily large enough to be a concern yet.
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples2, 'rating_pred', -0.5, 6.5, 1,
+                         baseline_values=data$ratings,
+                         xlab="All Ratings")
+```
+
+More importantly the retrodictive performance for the customers that
+we've spot checked is much better.
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (c in c(7, 23, 40, 70, 77, 100)) {
+  names <- sapply(which(data$customer_idxs == c),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples2, names)
+
+  customer_ratings <- data$ratings[data$customer_idxs == c]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=customer_ratings,
+                           xlab="Ratings",
+                           main=paste('Customer', c))
+}
+```
+
+This improvement in the customer-wise behaviors hasn't come at any cost
+to the movie-wise retrodictive performance, at least for this limited
+spot check.
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (m in c(33, 53, 61, 80, 117, 180)) {
+  names <- sapply(which(data$movie_idxs == m),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples2, names)
+
+  movie_ratings <- data$ratings[data$movie_idxs == m]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=movie_ratings,
+                           xlab="Ratings",
+                           main=paste('Movie', m))
+}
+```
+
+Do the histograms of stratified summary statistics tell a similar story?
+The retrodictive tension in the customer-wise means and variances has
+decreased, although some remains in the variances.
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 2), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples2, 'mean_rating_customer_pred',
+                         0, 6, 0.5,
+                         baseline_values=mean_rating_customer,
+                         xlab="Customer-wise Average Ratings")
+
+util$plot_hist_quantiles(samples2, 'mean_rating_movie_pred',
+                         0, 6, 0.6,
+                         baseline_values=mean_rating_movie,
+                         xlab="Movie-wise Average Ratings")
+
+util$plot_hist_quantiles(samples2, 'var_rating_customer_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_customer,
+                         xlab="Customer-wise Rating Variances")
+
+util$plot_hist_quantiles(samples2, 'var_rating_movie_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_movie,
+                         xlab="Movie-wise Rating Variances")
+```
+
+Moreover the retrodictive tension in the collection of selected movie
+covariances remains.
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+filtered_samples <-
+  util$filter_expectands(samples2,
+                         covar_rating_movie_filt_names)
+
+util$plot_hist_quantiles(filtered_samples, 'covar_rating_movie_pred',
+                         -4.25, 4.25, 0.25,
+                         baseline_values=covar_rating_movie_filt,
+                         xlab="Filtered Movie-wise Rating Covariances")
+```
+
+If we were content with this mild retrodictive tensions then we would
+move on to exploring the posterior inferences themselves.  For example
+we could visualize the marginal posterior inferences for the cut points
+of each customer.
+
+```{r}
+par(mfrow=c(4, 1), mar=c(5, 5, 1, 1))
+
+for (k in 1:4) {
+  names <- sapply(1:data$N_customers,
+                  function(r) paste0('cut_points[', r, ',', k, ']'))
+  util$plot_disc_pushforward_quantiles(samples2, names,
+                                       xlab="Customer",
+                                       display_ylim=c(-6, 6),
+                                       ylab=paste0('cut_point[', k, ']'))
+}
+```
+
+The component cut points are a bit more interpretable when visualized
+together, especially when comparing customers.  For example to compare
+Customer 23 and Customer 70 we might overlay the marginal posterior
+visualizations of the four component cut points of each customer in
+adjacent plots.
+
+```{r}
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+cols <- c(util$c_mid, util$c_mid_highlight,
+          util$c_dark, util$c_dark_highlight)
+
+c <- 23
+
+k <- 1
+name <-paste0('cut_points[', c, ',', k, ']')
+util$plot_expectand_pushforward(samples2[[name]],
+                                50, flim=c(-9, 9), ylim=c(0, 2),
+                                col=cols[k], display_name='Cut Points',
+                                main=paste('Customer', c))
+
+
+for (k in 2:4) {
+  name <-paste0('cut_points[', c, ',', k, ']')
+  util$plot_expectand_pushforward(samples2[[name]],
+                                  50, flim=c(-9, 9),
+                                  col=cols[k], border="#BBBBBB88",
+                                  add=TRUE)
+}
+
+text(0, 1.65, "cut_points[1]", col=util$c_mid)
+text(2, 1.4, "cut_points[2]", col=util$c_mid_highlight)
+text(4, 1, "cut_points[3]", col=util$c_dark)
+text(6, 0.5, "cut_points[4]", col=util$c_dark_highlight)
+
+c <- 70
+
+k <- 1
+name <-paste0('cut_points[', c, ',', k, ']')
+util$plot_expectand_pushforward(samples2[[name]],
+                                50, flim=c(-9, 9), ylim=c(0, 2),
+                                col=cols[k], display_name='Cut Points',
+                                main=paste('Customer', c))
+
+
+for (k in 2:4) {
+  name <-paste0('cut_points[', c, ',', k, ']')
+  util$plot_expectand_pushforward(samples2[[name]],
+                                  50, flim=c(-9, 9),
+                                  col=cols[k], border="#BBBBBB88",
+                                  add=TRUE)
+}
+
+text(-5.5, 0.35, "cut_points[1]", col=util$c_mid)
+text(-3, 0.75, "cut_points[2]", col=util$c_mid_highlight)
+text(-2, 1.0, "cut_points[3]", col=util$c_dark)
+text(1.0, 1.25, "cut_points[4]", col=util$c_dark_highlight)
+```
+
+This allow us to see that Customer 23 is pretty stingy; a movie affinity
+needs to be pretty large in order for the probability of a large rating
+to be non-negligible.  On the other hand Customer 70 is much more
+generous; they are likely to give even a mediocre movie a high rating.
+
+At the same time we can investigate the inferred affinities for each
+movie.
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+util$plot_expectand_pushforward(samples2[['tau_gamma']],
+                                25, flim=c(0, 1),
+                                display_name='tau_gamma')
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('gamma[', m, ']'))
+util$plot_disc_pushforward_quantiles(samples2, names,
+                                     xlab="Movie",
+                                     ylab="Affinity")
+```
+
+While there is a lot of uncertainty, not surprising given the limited
+data, we can definitely see some trends.  For example the concentration
+of the `tau_gamma` marginal posterior distribution away from zero
+indicates substantial variation in the movie affinities.  Moreover
+despite the uncertainties we can clearly differentiate the best movies
+from the worst movies.  We'll do even more with these movie affinity
+inferences in the next section.
+
+# Hierarchical Customer Model
+
+At this point we need to address a stark asymmetry in the last model.
+Although we're accounting for heterogeneity in both customer and movie
+behaviors, we're modeling only the latter hierarchically.  We don't have
+any domain expertise that obstructs the exchangeability of the customers
+so why don't we model the individual cut points hierarchically as well?
+All we need is an appropriate multivariate population model.
+
+Conveniently the induced Dirichlet prior naturally composes with a
+hyper Dirichlet population model that I discussed in my
+[die fairness case study](https://betanalpha.github.io/assets/chapters_html/die_fairness.html).
+This makes for a natural cut point population model that pools each
+customer's ratings to a common distribution of rating probabilities.
+
+That said this is not the most general hierarchical model that we might
+consider.  This model assumes that the heterogeneity in the cut points
+is independent of the heterogeneity in the movie affinities and more
+generally those heterogeneities could be coupled together.  That said I
+think that it is more than reasonable to assume that how each customer
+translates their preferences into a movie rating is independent from
+those preferences themselves.
+
+```{.stan include="stan_programs/model3.stan" filename="model3.stan"}
+```
+
+```{r}
+#| warning: false
+#| message: false
+#| cache: true
+fit <- stan(file="stan_programs/model3.stan",
+            data=data, seed=8438338,
+            warmup=1000, iter=2024, refresh=0)
+```
+
+The hierarchical model over the cut points has already proved useful --
+the mild computational issues that we had considered in the last model
+fit have vanished.
+
+```{r}
+diagnostics <- util$extract_hmc_diagnostics(fit)
+util$check_all_hmc_diagnostics(diagnostics)
+
+samples3 <- util$extract_expectand_vals(fit)
+base_samples <- util$filter_expectands(samples3,
+                                       c('gamma_ncp',
+                                         'tau_gamma',
+                                         'cut_points',
+                                         'mu_q', 'tau_q'),
+                                       check_arrays=TRUE)
+util$check_all_expectand_diagnostics(base_samples)
+```
+
+Overall the retrodictive performance is a little bit better than in the
+previous model.  In particular the agreements in the aggregate ratings
+histogram and stratified covariances histogram have improved slightly.
+On the other hand the retrodictive tension in the stratified variances
+stubbornly persists.  We shouldn't expect too much performance, however,
+given that the hierarchical structure doesn't add any flexibility to the
+customer behaviors beyond what we had already included.
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples3, 'rating_pred', -0.5, 6.5, 1,
+                         baseline_values=data$ratings,
+                         xlab="All Ratings")
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (c in c(7, 23, 40, 70, 77, 100)) {
+  names <- sapply(which(data$customer_idxs == c),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples3, names)
+
+  customer_ratings <- data$ratings[data$customer_idxs == c]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=customer_ratings,
+                           xlab="Ratings",
+                           main=paste('Customer', c))
+}
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (m in c(33, 53, 61, 80, 117, 180)) {
+  names <- sapply(which(data$movie_idxs == m),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples3, names)
+
+  movie_ratings <- data$ratings[data$movie_idxs == m]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=movie_ratings,
+                           xlab="Ratings",
+                           main=paste('Movie', m))
+}
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 2), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples3, 'mean_rating_customer_pred',
+                         0, 6, 0.5,
+                         baseline_values=mean_rating_customer,
+                         xlab="Customer-wise Average Ratings")
+
+util$plot_hist_quantiles(samples3, 'mean_rating_movie_pred',
+                         0, 6, 0.6,
+                         baseline_values=mean_rating_movie,
+                         xlab="Movie-wise Average Ratings")
+
+util$plot_hist_quantiles(samples3, 'var_rating_customer_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_customer,
+                         xlab="Customer-wise Rating Variances")
+
+util$plot_hist_quantiles(samples3, 'var_rating_movie_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_movie,
+                         xlab="Movie-wise Rating Variances")
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+filtered_samples <-
+  util$filter_expectands(samples3,
+                         covar_rating_movie_filt_names)
+
+util$plot_hist_quantiles(filtered_samples, 'covar_rating_movie_pred',
+                         -4.25, 4.25, 0.25,
+                         baseline_values=covar_rating_movie_filt,
+                         xlab="Filtered Movie-wise Rating Covariances")
+```
+
+If we were satisfied with this retrodictive performance then there are
+already many ways that we can explore and utilize these inferences.
+
+With the new hierarchical structure we can investigate what we learned
+about not only each individual customer but also the population of
+customers.  The marginal posterior distribution for `tau_q` suggests
+a small but non-negligible heterogeneity in the cut points.  Moreover
+the inferences for the baseline probabilities `mu_q` suggest that
+customers are relatively optimistic, with four star ratings being more
+probable than tree star ratings for a neutral movie with zero affinity.
+
+```{r}
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+util$plot_expectand_pushforward(samples3[['tau_q']],
+                                25, flim=c(0, 0.3),
+                                display_name='tau_q')
+
+names <- sapply(1:5, function(k) paste0('mu_q[', k, ']'))
+util$plot_disc_pushforward_quantiles(samples3, names,
+                                     xlab="Rating",
+                                     ylab="Baseline Rating Probability")
+```
+
+The regularizing influence of the hierarchical model is strongest for
+those customers with the fewest ratings.  For example Customer 42 has
+only three observed ratings, and the hierarchical inferences for their
+cut points shift and narrow pretty substantially relative to the
+inferences from the previous model.
+
+```{r}
+c <- 42
+table(data$customer_idxs)[c]
+```
+
+```{r}
+par(mfrow=c(2, 2), mar=c(5, 5, 1, 1))
+
+lab2_xs <- c(1.5, 2, -4, -3)
+lab2_ys <- c(0.15, 0.25, 0.35, 0.35)
+
+lab3_xs <- c(-6, -5, 3, 3.5)
+lab3_ys <- c(0.25, 0.4, 0.5, 0.6)
+
+for (k in 1:4) {
+  name <- paste0('cut_points[', c, ',', k, ']')
+  util$plot_expectand_pushforward(samples2[[name]],
+                                  50, flim=c(-10, 5), ylim=c(0, 1.0),
+                                  col=util$c_light,
+                                  display_name='Cut Points',
+                                  main=paste('Customer', c))
+
+  name <- paste0('cut_points[', c, ',', k, ']')
+  util$plot_expectand_pushforward(samples3[[name]],
+                                  50, flim=c(-10, 5),
+                                  col=util$c_dark, border="#BBBBBB88",
+                                  add=TRUE)
+
+  text(lab2_xs[k], lab2_ys[k], "Model 2", col=util$c_light)
+  text(lab3_xs[k], lab3_ys[k], "Model 3", col=util$c_dark)
+}
+```
+
+We can also see the impact of the hierarchical model if we examine the
+cut point inferences for the two models across all customers.  The more
+uncertain customer inferences in the previous model, especially for the
+first and last cut points, are pulled towards the other customer
+inferences.
+
+```{r}
+par(mfrow=c(4, 1), mar=c(5, 5, 1, 1))
+
+for (k in 1:4) {
+  names <- sapply(1:data$N_customers,
+                  function(c) paste0('cut_points[', c, ',', k, ']'))
+
+  yname <- paste0('cut_points[', k, ']')
+  util$plot_disc_pushforward_quantiles(samples3, names,
+                                       xlab="customer",
+                                       display_ylim=c(-6, 6),
+                                       ylab=yname)
+}
+```
+
+The hierarchical influence, however, doesn't change the qualitative
+details.  For example Customer 23 is still stingy with their ratings
+while Customer 70 is still generous.
+
+```{r}
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+cols <- c(util$c_mid, util$c_mid_highlight,
+          util$c_dark, util$c_dark_highlight)
+
+c <- 23
+
+k <- 1
+name <-paste0('cut_points[', c, ',', k, ']')
+util$plot_expectand_pushforward(samples3[[name]],
+                                50, flim=c(-9, 9), ylim=c(0, 2),
+                                col=cols[k], display_name='Cut Points',
+                                main=paste('Customer', c))
+
+
+for (k in 2:4) {
+  name <-paste0('cut_points[', c, ',', k, ']')
+  util$plot_expectand_pushforward(samples3[[name]],
+                                  50, flim=c(-9, 9),
+                                  col=cols[k], border="#BBBBBB88",
+                                  add=TRUE)
+}
+
+text(0, 1.65, "cut_points[1]", col=util$c_mid)
+text(2, 1.45, "cut_points[2]", col=util$c_mid_highlight)
+text(4, 1, "cut_points[3]", col=util$c_dark)
+text(6, 0.5, "cut_points[4]", col=util$c_dark_highlight)
+
+c <- 70
+
+k <- 1
+name <-paste0('cut_points[', c, ',', k, ']')
+util$plot_expectand_pushforward(samples3[[name]],
+                                50, flim=c(-9, 9), ylim=c(0, 2),
+                                col=cols[k], display_name='Cut Points',
+                                main=paste('Customer', c))
+
+
+for (k in 2:4) {
+  name <-paste0('cut_points[', c, ',', k, ']')
+  util$plot_expectand_pushforward(samples3[[name]],
+                                  50, flim=c(-9, 9),
+                                  col=cols[k], border="#BBBBBB88",
+                                  add=TRUE)
+}
+
+text(-5.5, 0.4, "cut_points[1]", col=util$c_mid)
+text(-3, 0.85, "cut_points[2]", col=util$c_mid_highlight)
+text(-2, 1.15, "cut_points[3]", col=util$c_dark)
+text(1.0, 1.35, "cut_points[4]", col=util$c_dark_highlight)
+```
+
+Of course we can still investigate the behavior of individual movies and
+the hierarchical population of movies.  The hierarchical regularization
+of the cut points allows the observed ratings to slightly better inform
+the movie affinities.
+
+```{r}
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+util$plot_expectand_pushforward(samples3[['tau_gamma']],
+                                50, flim=c(0, 1),
+                                display_name='tau_gamma')
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('gamma[', m, ']'))
+util$plot_disc_pushforward_quantiles(samples3, names,
+                                     xlab="Movie",
+                                     ylab="Affinity")
+```
+
+Now let's go one step further than we did in the previous section and
+use these movie inferences to rank the movies by their expected
+affinities.  This is just one heuristic for ranking items based on their
+inferred qualities, but one that has the advantage of being relatively
+fast to compute.
+
+```{r}
+expected_affinity <- function(m) {
+  util$ensemble_mcmc_est(samples3[[paste0('gamma[', m, ']')]])[1]
+}
+
+expected_affinities <- sapply(1:data$N_movies,
+                             function(m) expected_affinity(m))
+
+post_mean_ordering <- sort(expected_affinities, index.return=TRUE)$ix
+```
+
+We can then use this ranking to select out the five worst movies.
+
+```{r}
+print(data.frame("Rank"=200:196,
+                 "Movie"=head(post_mean_ordering, 5)),
+      row.names=FALSE)
+```
+
+To be a bit less pessimistic we could also consider the five best
+movies.
+
+```{r}
+print(data.frame("Rank"=5:1,
+                 "Movie"=tail(post_mean_ordering, 5)),
+      row.names=FALSE)
+```
+
+We have a variety of ways to make inferential comparisons between two
+movies at a time.  For example we could just overlay the marginal
+posterior distributions for each movie affinity.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+m1 <- head(post_mean_ordering, 1)
+name <-paste0('gamma[', m1, ']')
+util$plot_expectand_pushforward(samples3[[name]],
+                                50, flim=c(-3, 3),
+                                ylim=c(0, 1.3),
+                                col=util$c_mid,
+                                display_name='Affinity')
+text(-1.25, 1.2, paste('Movie', m1), col=util$c_mid)
+
+m2 <- tail(post_mean_ordering, 1)
+name <-paste0('gamma[', m2, ']')
+util$plot_expectand_pushforward(samples3[[name]],
+                                50, flim=c(-3, 3),
+                                col=util$c_dark,
+                                border="#BBBBBB88",
+                                add=TRUE)
+text(1.25, 1.2, paste('Movie', m2), col=util$c_dark)
+```
+
+Even better we can directly compute the probability that one movie
+affinity is larger than the other.  Here there is little ambiguity
+whether or not the top ranked movie is actually better than the worst
+ranked movie.
+
+```{r}
+var_repl <- list('g1' = paste0('gamma[', m1,']'),
+                 'g2' = paste0('gamma[', m2,']'))
+
+p_est <-
+  util$implicit_subset_prob(samples3,
+                            function(g1, g2) g1 < g2,
+                            var_repl)
+
+format_string <- paste0("Posterior probability that movie %i affinity ",
+                        "> movie %i affinity = %.3f +/- %.3f.")
+cat(sprintf(format_string, m1, m2, p_est[1], 2 * p_est[2]))
+```
+
+# Hierarchical Customer Model With Heterogeneous Affinities
+
+At this point there are two main limitations with the last model.
+Firstly there is the mild retrodictive tension in a few of the summary
+statistics.  Secondly it makes the strong assumption that once the
+different interpretations of ratings are taken into account all
+customers have the same opinions about each movie.
+
+This for example prevents us from making personalized recommendations to
+each customer.  Incorporating individual tastes into the model would
+inform much more nuanced inferences and predictions.  It could even
+resolve some of the retrodictive tension.
+
+The immediate challenge with trying to infer personal movie preferences,
+however, is that customers rate only a very small proportion of the
+available movies.
+
+```{r}
+xs <- seq(1, data$N_movies, 1)
+ys <- seq(1, data$N_customers, 1)
+zs <- matrix(0, nrow=data$N_movies, ncol=data$N_customers)
+
+for (n in 1:data$N_ratings) {
+  zs[data$movie_idxs[n], data$customer_idxs[n]] <- 1
+}
+
+par(mfrow=c(1, 1), mar = c(5, 5, 1, 1))
+
+image(xs, ys, zs, col=c("white", util$c_dark_teal),
+      xlab="Movie", ylab="customer")
+```
+
+In the machine learning literature the problem of filling in unobserved
+pairs, like customer-movie ratings in this application, is often known
+as "matrix completion" in analogy to filling in the missing cells of
+this visualization.
+
+Because most of the ratings are unobserved the only way to inform
+individual customer preferences for each movie is to pool correlations
+in each movie affinities across customers.  For example we might model
+each customers' movie affinities as common baseline affinities plus
+individual deviations,
+$$
+\boldsymbol{\gamma}_{c}
+=
+\boldsymbol{\gamma}_{0} + \boldsymbol{\delta}_{c}.
+$$
+We can then pool these individual deviations together with a
+multivariate normal population model,
+$$
+p(\boldsymbol{\delta}_{c})
+=
+\text{multi-normal}( \mathbf{0}, \boldsymbol{\Sigma} )
+$$
+with
+$$
+\boldsymbol{\Sigma}
+=
+\boldsymbol{\tau}_{\gamma}^{T} \cdot
+\boldsymbol{\Phi}_{\gamma} \cdot
+\boldsymbol{\tau}_{\gamma}.
+$$
+Whatever we learn about the population baseline
+$\boldsymbol{\gamma}_{0}$, the population scales
+$\boldsymbol{\tau}_{\gamma}$, and the population correlations
+$\boldsymbol{\Phi}_{\gamma}$ fill in whatever elements of any affinity
+vector $\boldsymbol{\gamma}_{c}$ that might be unobserved.
+
+Because the movies are still exchangeable we can model the baseline
+movie affinities hierarchically as well,
+$$
+p( \gamma_{0, m} ) = \text{normal}(0, \tau_{\gamma_{0}} ).
+$$
+We're now modeling the cut points, the baseline movie affinities, _and_
+the individual customer affinities hierarchically all at the same time.
+Pretty neat.
+
+Given the sparsity of observed ratings we'll implement the normal and
+multivariate normal hierarchical models with non-centered
+parameterizations.
+
+```{.stan include="stan_programs/model4.stan" filename="model4.stan"}
+```
+
+```{r}
+#| warning: false
+#| message: false
+#| cache: true
+fit <- stan(file="stan_programs/model4.stan",
+            data=data, seed=8438338, init=0,
+            warmup=1000, iter=2024, refresh=0)
+```
+
+People complain about the annoyance of diagnostic warnings but how bad
+can they be if we don't see any for this complex model with 40,706
+degrees of freedom?  Turns out Hamiltonian Monte Carlo is pretty good!
+
+```{r}
+diagnostics <- util$extract_hmc_diagnostics(fit)
+util$check_all_hmc_diagnostics(diagnostics)
+
+samples4 <- util$extract_expectand_vals(fit)
+base_samples <- util$filter_expectands(samples4,
+                                       c('gamma0_ncp',
+                                         'tau_gamma0',
+                                         'delta_gamma_ncp',
+                                         'tau_delta_gamma',
+                                         'L_delta_gamma',
+                                         'cut_points',
+                                         'mu_q', 'tau_q'),
+                                       check_arrays=TRUE)
+util$check_all_expectand_diagnostics(base_samples,
+                                     exclude_zvar=TRUE)
+```
+
+Unfortunately all of this added sophisticated doesn't actually seem to
+improve the retrodictive performance much.  Even the retrodictive
+tension in the covariances, which should be particularly sensitive to
+added flexibility in the new model, is similar to what we saw with the
+previous model.  One possibility is that the multivariate normal
+population model is isn't sufficiently heavy-tailed to accommodate the
+more extreme tastes of the customers.
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples4, 'rating_pred', -0.5, 6.5, 1,
+                         baseline_values=data$ratings,
+                         xlab="All Ratings")
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (c in c(7, 23, 40, 70, 77, 100)) {
+  names <- sapply(which(data$customer_idxs == c),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples4, names)
+
+  customer_ratings <- data$ratings[data$customer_idxs == c]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=customer_ratings,
+                           xlab="Ratings",
+                           main=paste('Customer', c))
+}
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 3), mar=c(5, 5, 1, 1))
+
+for (m in c(33, 53, 61, 80, 117, 180)) {
+  names <- sapply(which(data$movie_idxs == m),
+                  function(n) paste0('rating_pred[', n, ']'))
+  filtered_samples <- util$filter_expectands(samples4, names)
+
+  movie_ratings <- data$ratings[data$movie_idxs == m]
+  util$plot_hist_quantiles(filtered_samples, 'rating_pred',
+                           -0.5, 6.5, 1,
+                           baseline_values=movie_ratings,
+                           xlab="Ratings",
+                           main=paste('Movie', m))
+}
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(2, 2), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples4, 'mean_rating_customer_pred',
+                         0, 6, 0.5,
+                         baseline_values=mean_rating_customer,
+                         xlab="Customer-wise Average Ratings")
+
+util$plot_hist_quantiles(samples4, 'mean_rating_movie_pred',
+                         0, 6, 0.6,
+                         baseline_values=mean_rating_movie,
+                         xlab="Movie-wise Average Ratings")
+
+util$plot_hist_quantiles(samples4, 'var_rating_customer_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_customer,
+                         xlab="Customer-wise Rating Variances")
+
+util$plot_hist_quantiles(samples4, 'var_rating_movie_pred',
+                         0, 7, 0.5,
+                         baseline_values=var_rating_movie,
+                         xlab="Movie-wise Rating Variances")
+```
+
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+filtered_samples <-
+  util$filter_expectands(samples4,
+                         covar_rating_movie_filt_names)
+
+util$plot_hist_quantiles(filtered_samples, 'covar_rating_movie_pred',
+                         -4.25, 4.25, 0.25,
+                         baseline_values=covar_rating_movie_filt,
+                         xlab="Filtered Movie-wise Rating Covariances")
+```
+
+The lack of any substantial improvements in the retrodictive performance
+suggests that we might not have included enough data to really resolve
+individual customer preferences quite yet.  We can directly quantify how
+much we can resolve individual customer preferences by examining our
+posterior inferences.
+
+Posterior inferences for the cut point population behaviors are mostly
+consistent with the previous model, although the baseline rating
+probabilities do slightly shift down to be more centered around 3.
+This suggest that the previous model may have been contorting itself a
+bit to account for the variation in customer tastes.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_expectand_pushforward(samples3[['tau_q']],
+                                25, flim=c(0, 0.3),
+                                col=util$c_light,
+                                display_name='tau_q')
+text(0.05, 10, "Model 2", col=util$c_light)
+
+util$plot_expectand_pushforward(samples4[['tau_q']],
+                                25, flim=c(0, 0.3),
+                                col=util$c_dark,
+                                border="#BBBBBB88",
+                                add=TRUE)
+text(0.2, 10, "Model 3", col=util$c_dark)
+```
+
+```{r}
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+names <- sapply(1:5, function(k) paste0('mu_q[', k, ']'))
+util$plot_disc_pushforward_quantiles(samples3, names,
+                                     xlab="Rating",
+                                     ylab="Baseline Rating Probability",
+                                     main="Model 3")
+
+names <- sapply(1:5, function(k) paste0('mu_q[', k, ']'))
+util$plot_disc_pushforward_quantiles(samples4, names,
+                                     xlab="Rating",
+                                     ylab="Baseline Rating Probability",
+                                     main="Model 4")
+```
+
+Similarly some of the individual customer cut points change slightly.
+For example the cut points for Customer 23 shift a bit towards larger
+values.
+
+```{r}
+par(mfrow=c(2, 2), mar=c(5, 5, 1, 1))
+
+c <- 23
+
+lab3_xs <- c(0, -0.5, 0, 1)
+lab3_ys <- c(1.75, 0.5, 0.5, 0.25)
+
+lab4_xs <- c(2, 4, 5.5, 8)
+lab4_ys <- c(0.5, 0.5, 0.5, 0.25)
+
+for (k in 1:4) {
+  name <-paste0('cut_points[', c, ',', k, ']')
+  util$plot_expectand_pushforward(samples3[[name]],
+                                  40, flim=c(-2, 10),
+                                  col=util$c_light,
+                                  display_name=name)
+  util$plot_expectand_pushforward(samples4[[name]],
+                                  40, flim=c(-2, 10),
+                                  col=util$c_dark,
+                                  border="#BBBBBB88",
+                                  add=TRUE)
+
+  text(lab3_xs[k], lab3_ys[k], "Model 3", col=util$c_light)
+  text(lab4_xs[k], lab4_ys[k], "Model 4", col=util$c_dark)
+}
+```
+
+The baseline movie affinities emulate the universal movie preferences in
+the previous model, and indeed inferences for them are similar if
+slightly more heterogeneous.
+
+
+```{r}
+par(mfrow=c(2, 2), mar=c(5, 5, 1, 1))
+
+util$plot_expectand_pushforward(samples3[['tau_gamma']],
+                                25, flim=c(0, 1.25),
+                                display_name="tau_gamma",
+                                main="Model 3")
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('gamma[', m, ']'))
+util$plot_disc_pushforward_quantiles(samples3, names,
+                                     xlab="Movie",
+                                     ylab="Affinities",
+                                     main="Model 3")
+
+
+util$plot_expectand_pushforward(samples4[['tau_gamma0']],
+                                25, flim=c(0, 1.25),
+                                display_name="tau_gamma0",
+                                main="Model 4")
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('gamma0[', m, ']'))
+util$plot_disc_pushforward_quantiles(samples4, names,
+                                     xlab="Movie",
+                                     ylab="Baseline Affinities",
+                                     main="Model 4")
+```
+
+Now, however, we can investigate the preferences idiosyncratic to each
+customer.  For example the individual movie affinity scales quantify how
+much the customers disagree about a particular movie.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('tau_delta_gamma[', m, ']'))
+util$plot_disc_pushforward_quantiles(samples4, names,
+                                     xlab="Movie",
+                                     ylab="Affinity Variation Scales")
+```
+
+Overall there is a lot of uncertainty, with the inferences for most of
+the movie affinity scales concentrating around zero.  That said a few
+stand out.  For example the posterior inferences for
+$\tau_{\gamma, 159}$ are starting to pull away from zero, suggesting
+that customers tend to disagree with the quality of this movie more than
+usual.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+m <- 159
+name <- paste0('tau_delta_gamma[', m, ']')
+util$plot_expectand_pushforward(samples4[[name]],
+                                25, flim=c(0, 10),
+                                display_name=name)
+```
+
+The inferred correlations in the multivariate normal population model
+allow us to inform predictions for how a customer would react to unrated
+movies given the movies they have rated.  Unfortunately the
+$$
+\frac{ N_{\text{movies}} (N_{\text{movies}} - 1) }{ 2 }
+=
+19900
+$$
+correlation matrix elements are a bit too ungainly to examine
+individually.
+
+It's more practical, not to mention more interpretable, to instead
+investigate the consequence of these correlations.  In particular we can
+look at the movie affinities for each customer by adding together the
+common baselines with their individual preferences.  Here we'll consider
+Customer 23.
+
+```{r}
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+c <- 23
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('gamma0[', m, ']'))
+util$plot_disc_pushforward_quantiles(samples4, names,
+                                     xlab="Movie",
+                                     ylab="Baseline Affinity",
+                                     main="Baseline")
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('delta_gamma[', c, ',', m, ']'))
+util$plot_disc_pushforward_quantiles(samples4, names,
+                                     xlab="Movie",
+                                     ylab="Change in Affinity",
+                                     main=paste0('Customer', c))
+```
+
+```{r}
+expectands <- sapply(1:data$N_movies,
+                     function(m)
+                       local({ idx = m; function(x1, x2)
+                                        x1[idx] + x2[idx] }) )
+names(expectands) <- sapply(1:data$N_movies,
+                            function(m)
+                            paste0('gamma[', c, ',', m, ']'))
+
+var_repl <- list('x1'=array(sapply(1:data$N_movies,
+                                   function(m)
+                                   paste0('gamma0[', m, ']'))),
+                 'x2'=array(sapply(1:data$N_movies,
+                                   function(m)
+                                   paste0('delta_gamma[', c,
+                                          ',', m, ']'))))
+
+affinity_samples <-
+  util$eval_expectand_pushforwards(samples4,
+                                   expectands,
+                                   var_repl)
+```
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('gamma[', c, ',', m, ']'))
+
+util$plot_disc_pushforward_quantiles(affinity_samples, names,
+                                     xlab="Movie",
+                                     ylab="Affinity",
+                                     main=paste('Customer', c))
+```
+
+Even better we can separately visualize the movie affinities that are
+directly informed by observed ratings and those informed by only the
+multivariate normal hierarchical model.  Note that the affinities for
+the movies that Customer 23 did not rate are not only much more
+uncertain but also much more uniform.
+
+```{r}
+rated_movie_idxs <- data$movie_idxs[data$customer_idxs == c]
+unrated_movie_idxs <- setdiff(1:data$N_movies, rated_movie_idxs)
+
+par(mfrow=c(2, 1), mar=c(5, 5, 1, 1))
+
+names <- sapply(1:data$N_movies,
+                function(m) paste0('gamma[', c, ',', m, ']'))
+util$plot_disc_pushforward_quantiles(affinity_samples, names,
+                                     xlab="Rated Movie",
+                                     ylab="Customer Affinity",
+                                     main=paste0('Customer', c))
+for (m in unrated_movie_idxs) {
+  polygon(c(m - 0.5, m + 0.5, m + 0.5, m- 0.5),
+          c(-4.75, -4.75, 4.75, 4.75), col="white", border=NA)
+}
+
+util$plot_disc_pushforward_quantiles(affinity_samples, names,
+                                     xlab="Unrated Movie",
+                                     ylab="Customer Affinity",
+                                     main=paste0('Customer', c))
+for (m in rated_movie_idxs) {
+  polygon(c(m - 0.5, m + 0.5, m + 0.5, m- 0.5),
+          c(-4.75, -4.75, 4.75, 4.75), col="white", border=NA)
+}
+```
+
+The immediate benefit of modeling individual preferences is that we can
+now make movie recommendations bespoke to Customer 23.
+
+```{r}
+expected_affinity <- function(m) {
+  name <- paste0('gamma[', c, ',', m, ']')
+  util$ensemble_mcmc_est(affinity_samples[[name]])[1]
+}
+
+expected_affinities <- sapply(1:data$N_movies,
+                             function(m) expected_affinity(m))
+
+post_mean_ordering <- sort(expected_affinities, index.return=TRUE)$ix
+```
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+names <- sapply(post_mean_ordering,
+                function(m) paste0('gamma[', c, ',', m, ']'))
+
+xname <- "Movies Ordered by Expected Affinity"
+util$plot_disc_pushforward_quantiles(affinity_samples, names,
+                                     xlab=xname,
+                                     ylab="Affinity")
+```
+
+From this we can infer what movies we think Customer 23 will like the
+least.
+
+```{r}
+print(data.frame("Rank"=200:196,
+                 "Movie"=head(post_mean_ordering, 5)),
+      row.names=FALSE)
+```
+
+As well as what movies we think they will like the most.
+
+```{r}
+print(data.frame("Rank"=5:1,
+                 "Movie"=tail(post_mean_ordering, 5)),
+      row.names=FALSE)
+```
+
+Of course there's not much utility in recommending a customer a movie
+that they've already seen.  A much more useful recommendation is for
+movies that they haven't yet seen but might enjoy.
+
+Here let's assume that a movie has been unrated by a customer only if it
+the customer has not yet seen it.  Consequently the recommendation task
+comes down to inferring the unrated movies with the highest affinities
+for Customer 23.
+
+```{r}
+expected_affinities <- sapply(unrated_movie_idxs,
+                              function(m) expected_affinity(m))
+
+post_mean_ordering <- sort(expected_affinities, index.return=TRUE)$ix
+```
+
+We can finally present a list of the top movies to recommend to Customer
+23.
+
+```{r}
+print(data.frame("Rank"=10:1,
+                 "Movie"=tail(unrated_movie_idxs[post_mean_ordering], 10)),
+      row.names=FALSE)
+```
+
+All of this said we should have only mild confidence in these
+recommendations given the large uncertainties.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+names <- sapply(unrated_movie_idxs[post_mean_ordering],
+                function(m) paste0('gamma[', c, ',', m, ']'))
+
+xname <- "Unrated Movies Ordered by Expected Affinity"
+util$plot_disc_pushforward_quantiles(affinity_samples, names,
+                                     xlab=xname,
+                                     ylab="Affinity")
+```
+
+One subtlety with recommendations is that in most applications we cannot
+evaluate their performance directly.  For example absent any additional
+interrogation of the Customer 23 the only indication of how much they
+agree with one our recommendations is how well they rate the movie in
+the future.
+
+Fortunately we can use our inferences to predict not only the latent
+affinity of these movie recommendations but also how we think Customer
+23 would rate them.  This would allow us to compare predicted rankings
+to actual rankings.
+
+```{r}
+movie_idx <- tail(unrated_movie_idxs[post_mean_ordering], 1)
+
+logistic <- function(x) {
+  if (x > 0) {
+    1 / (1 + exp(-x))
+  } else {
+    e <- exp(x)
+    e / (1 + e)
+  }
+}
+
+expectands <- list(function(c, gamma) 1 - logistic(gamma - c[1]),
+                   function(c, gamma) logistic(gamma - c[1]) -
+                                      logistic(gamma - c[2]),
+                   function(c, gamma) logistic(gamma - c[2]) -
+                                      logistic(gamma - c[3]),
+                   function(c, gamma) logistic(gamma - c[3]) -
+                                      logistic(gamma - c[4]),
+                   function(c, gamma) logistic(gamma - c[4]))
+names(expectands) <- c('p[1]', 'p[2]', 'p[3]', 'p[4]', 'p[5]')
+
+var_repl <- list('c'=array(sapply(1:4,
+                           function(k)
+                           paste0('cut_points[', c, ',', k, ']'))),
+                 'gamma'=paste0('gamma[', c, ',', movie_idx, ']'))
+
+for (k in 1:4) {
+  name <- paste0('cut_points[', c, ',', k, ']')
+  affinity_samples[[name]] <- samples4[[name]]
+}
+
+prob_samples <-util$eval_expectand_pushforwards(affinity_samples,
+                                                expectands,
+                                                var_repl)
+```
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_disc_pushforward_quantiles(prob_samples, names(expectands),
+                                     xlab="Rating",
+                                     ylab="Posterior Probability")
+```
+
+Interestingly we don't actually predict a high rating for our top
+recommendation. In hindsight, however, this shouldn't be unexpected
+given how austere Customer 23 is with their stars.
+
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_line_hist(data$ratings[data$customer_idxs == c],
+                    -0.5, 6.5, 1,
+                    xlab="Rating", main=paste('customer', c))
+```
+
+Another benefit of this hierarchical approach is that we are not limited
+to making inferences and predictions for existing customers.  In
+particular we can also make inferences and predictions for new customers
+by sampling new cut points and movie affinities from the respective
+hierarchical population models.  With the dearth of observed ratings
+these predictions will be highly uncertain, but at the same time that
+uncertainty prevents us from making overly confident claims.
+
+# Computational Considerations
+
+I want to emphasize that this case study is first and foremost a
+demonstrative analysis.  In particular I reduced the data not for any
+statistical reason by rather to ensure that the models would not take
+too long to run as I developed the analysis.  Ultimately the final model
+took about three hours to run on my laptop which wasn't too onerous,
+especially given the total number of parameters.
+
+That said I do think it is useful to at least consider what the
+different priorities might be for a more realistic analysis where a
+specific inferential goal would be driving the amount of data to include
+and different computational resources might be available.  What _would_
+it take to speed up the fit of the final model or scale it up to a
+larger data set?
+
+Recall that the overall cost of running Hamiltonian Monte Carlo can
+roughly be decomposed into the number of iterations, the number of model
+evaluations per iteration, and the cost of each model evaluation.  The
+number of model evaluations per iteration is driven by the posterior
+geometry and how hard the Hamiltonian Monte Carlo algorithm has to work
+to explore it.  For a fixed data set the two main ways that we can
+reduce computation is to improve the posterior geometry or speed up the
+model evaluations.
+
+Whenever working with hierarchical models we need to be considerate of
+the potentially problematic geometries to which they are prone.  In
+this case study we seemed to do okay with a monolithic non-centered
+parameterization for the normal and multivariate normal hierarchies, but
+we could possibly improve the geometry by non-centering the parameters
+corresponding to more prolific movies and customers.  Before doing that,
+however, we can estimate the potential for improvement by examining the
+length of the numerical Hamiltonian trajectories, and hence how many
+model evaluations were needed per iteration, in our last fit.
+
+```{r}
+util$plot_num_leapfrogs_by_chain(diagnostics)
+```
+
+Despite the complexity of the final model the numerical Hamiltonian
+trajectories weren't all that long.  Even in an ideal case we can't do
+do much better than ten or so leapfrog steps per trajectory;
+consequently the maximum possible speed up that we could get from
+improving the geometry here would be less than an order of magnitude!
+That's not trivial but it suggests that the computational cost is not
+being dominated by the number of model evaluations but rather the cost
+of each model evaluation itself.
+
+So how can we speed up the model evaluations?  One immediate strategy is
+parallelization, especially if we're working with computers blessed with
+lots and lots of threads.  For example we can, at least in theory,
+parallelize the many matrix-vector products that are required in the
+`transformed parameters` block.  That said achieving these potential
+speed ups in practice is always frustrated by the subtle input/output
+costs of passing all of the needed information to each thread and back
+in each model evaluation.
+
+Either approach to speeding up the fitting of the final model will be
+challenging, requiring careful investigations and implementations and
+offering no guarantee of success.  Even worse neither of these
+strategies will really be able to compete with the quadratic cost of
+evaluating the model, both in terms of
+$N_{\text{customer}} \cdot N_{\text{movie}}$ and $N_{\text{movie}}^{2}$,
+if we attempt to add more customers and/or movies.  For example scaling
+up from 200 movies to 2000 movies, still only a fraction of the total
+data set and an even more negligible part of the full data a company
+like Netflix would have available, would require a 100 fold increase in
+the cost of evaluating the model.  Even if the posterior geometry
+doesn't get any worst that pushes three hours to over a full day of
+computation.
+
+In practice we can fight quadratic scaling only so far.  Ultimately the
+problem is that the final model has to compare every movie to every
+other movie.  Consequently the most effective scaling strategy is to
+limit the number of movies to which each movie is compared.  More
+formally we need to introduce an appropriate sparsity structure on the
+movies so that most of the $N_{\text{movie}}^{2}$ covariances are zero.
+
+Many methods attempt to learn a sparsity structure consistent with the
+observed data, dynamically turning off covariances that end up too
+small.  This, however, is an outrageously difficult learning problem and
+approximate results tend to be fragile without unreasonable amounts of
+data.  We can usually do much better by taking advantage of our domain
+expertise to motivate appropriate sparsity structures directly.
+
+For example we could first group movies into genres before modeling
+common baseline affinities, correlated deviations across genres, and
+perhaps even correlated deviations for each movie within each genre.
+This effectively introduces a block-diagonal structure to the full
+covariance matrix which scales much more efficiently without sacrificing
+_all_ of the correlations that can help inform predictions for unrated
+movies.
+
+Given the sparsity of the observed ratings we can learn only so much.
+Consequently we might as well build a more restricted model of
+meaningful behaviors that we have a hope of resolving than attempting
+to learn intricate details about which we just don't have enough
+information.
+
+# Conclusion
+
+In this case study I developed a relatively sophisticated analysis of
+consumer feedback that accounts for not only how each customer
+interprets the possible ordinal ratings in different ways but also the
+variation in their preferences.  To learn anything about these behaviors
+in spite of the sparsity of the data we had to leverage our domain
+expertise and some intricate modeling techniques.
+
+If anything I hope that this case study demonstrates how powerful
+hierarchical modeling techniques can be when used carefully.  We used
+our domain expertise to sketch out the data generating process first,
+and only then considered opportunities for heterogeneous behaviors.
+
+By starting with the broad features of the data generating process we
+established an explicit context that made is easier to identify not only
+what behaviors were heterogeneous but also what heterogeneous behaviors
+might be coupled together.  Moreover the structure of those behaviors
+motivated appropriate population models.  In this way we were able to
+develop an elaborate model with multiple, multivariate hierarchies
+without becoming to overwhelmed in the process.
+
+Hierarchical modeling is so much more than one-dimensional normal
+population models!
+
+# Acknowledgements {-}
+
+A very special thanks to everyone supporting me on Patreon: 
+Adam Fleischhacker, Adriano Yoshino, Alejandro Navarro-Martínez,
+Alessandro Varacca, Alex D, Alexander Noll, Andrea Serafino,
+Andrew Mascioli, Andrew Rouillard, Andrew Vigotsky, Ara Winter,
+Austin Rochford, Avraham Adler, Ben Matthews, Ben Swallow,
+Benoit Essiambre, Bertrand Wilden, boot, Bradley Kolb, Brendan Galdo,
+Bryan Chang, Brynjolfur Gauti Jónsson, Cameron Smith, Canaan Breiss,
+Cat Shark, CG, Charles Naylor, Chase Dwelle, Chris Jones,
+Christopher Mehrvarzi, Colin Carroll, Colin McAuliffe, Damien Mannion,
+dan mackinlay, Dan W Joyce, Dan Waxman, Dan Weitzenfeld,
+Daniel Edward Marthaler, Daniel Saunders, Darshan Pandit, Darthmaluus ,
+David Galley, David Wurtz, Doug Rivers, Dr. Jobo, Dr. Omri Har Shemesh,
+Dylan Maher, Ed Cashin, Edgar Merkle, Eli Witus, Eric LaMotte,
+Ero Carrera, Eugene O'Friel, Felipe González, Fergus Chadwick,
+Finn Lindgren, Francesco Corona, Geoff Rollins, Guilherme Marthe,
+Håkan Johansson, Hamed Bastan-Hagh, haubur, Hector Munoz, Henri Wallen,
+hs, Hugo Botha, Ian, Ian Costley, idontgetoutmuch, Ignacio Vera,
+Ilaria Prosdocimi, Isaac Vock, Isidor Belic, jacob pine, Jair Andrade,
+James C, James Hodgson, James Wade, Janek Berger, Jarrett Byrnes,
+Jason Martin, Jason Pekos, Jason Wong, jd, Jeff Burnett, Jeff Dotson,
+Jeff Helzner, Jeffrey Erlich, Jerry Lin , Jessica Graves, Joe Sloan,
+John Flournoy, Jonathan H. Morgan, Jonathon Vallejo, Joran Jongerling,
+Josh Knecht, June, Justin Bois, Kádár András, Karim Naguib, Karim Osman,
+Kristian Gårdhus Wichmann, Lars Barquist, lizzie , LOU ODETTE,
+Luís F, Marcel Lüthi, Marek Kwiatkowski, Mariana Carmona, Mark Donoghoe,
+Markus P., Márton Vaitkus, Matthew, Matthew Kay, Matthew Mulvahill,
+Matthieu LEROY, Mattia Arsendi, Matěj Kolouch Grabovský,
+Maurits van der Meer, Max, Michael Colaresi, Michael DeWitt,
+Michael Dillon, Michael Lerner, Mick Cooney, Mike Lawrence,
+MisterMentat , N Sanders, N.S. , Name, Nathaniel Burbank, Nic Fishman,
+Nicholas Clark, Nicholas Cowie, Nick S, Ole Rogeberg, Oliver Crook,
+Olivier Ma, Patrick  Kelley, Patrick Boehnke, Pau Pereira Batlle,
+Pete St. Marie, Peter Johnson, Pieter van den Berg , ptr, quasar,
+Ramiro Barrantes Reynolds, Raúl Peralta Lozada, Ravin Kumar, Rémi ,
+Rex Ha, Riccardo Fusaroli, Richard Nerland, Robert Frost, Robert Goldman,
+Robert kohn, Robin Taylor, Ryan Gan, Ryan Grossman, Ryan Kelly, S Hong,
+Sean Wilson, Sergiy Protsiv, Seth Axen, shira, Simon Duane,
+Simon Lilburn, Simone Sebben, sssz, Stefan Lorenz, Stephen Lienhard,
+Steve Harris, Stew Watts, Stone Chen, Susan Holmes, Svilup, Tao Ye,
+Tate Tunstall, Tatsuo Okubo, Teresa Ortiz, Theodore Dasher,
+Thomas Siegert, Thomas Vladeck, Tobychev , Tony Wuersch, Tyler Burch,
+Virginia Fisher, Vladimir Markov, Wil Yegelwel, Will Farr, Will Lowe,
+Will Wen, woejozney, yolhaj , yureq , Zach A, Zad Rafi, and Zhengchen
+Cai.
+
+<!--
+# References {-}
+
+<div id="refs"></div>
+-->
+
+# License {-}
+
+A repository containing all of the files used to generate this chapter
+is available on [GitHub](
+https://github.com/betanalpha/quarto_case_studies/tree/main/ratings).
+
+The code in this case study is copyrighted by Michael Betancourt and
+licensed under the new BSD (3-clause) license:
+
+[https://opensource.org/licenses/BSD-3-Clause](https://opensource.org/licenses/BSD-3-Clause)
+
+The text and figures in this chapter are copyrighted by Michael Betancourt
+and licensed under the CC BY-NC 4.0 license:
+
+[https://creativecommons.org/licenses/by-nc/4.0/](https://creativecommons.org/licenses/by-nc/4.0/)
+
+# Original Computing Environment {-}
+
+```{r, comment=NA}
+writeLines(readLines(file.path(Sys.getenv("HOME"), ".R/Makevars")))
+```
+
+```{r, comment=NA}
+sessionInfo()
+```
+
