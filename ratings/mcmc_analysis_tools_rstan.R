@@ -155,10 +155,10 @@ check_all_hmc_diagnostics <- function(diagnostics,
       no_treedepth_warning <- FALSE
       local_message <- 
         paste0(local_message,
-               sprintf('  Chain %s: %s of %s transitions (%s%%) ', 
+               sprintf('  Chain %s: %s of %s transitions (%.3f%%) ',
                        c, n_tds, S, 100 * n_tds / S),
-               sprintf('saturated the maximum treedepth of %s.\n', 
-                       max_treedepth))
+                       '           saturated the maximum treedepth ',
+               sprintf('of %s.\n', max_treedepth))
     }
     
     # Check the energy fraction of missing information (E-FMI)
@@ -1817,7 +1817,7 @@ filter_expectands <- function(expectand_vals_list, requested_names,
   if (length(requested_names) == 0) {
     stop('Input variable requested_names must be non-empty.')
   }
-
+  
   if (check_arrays == TRUE) {
     good_names <- c()
     bad_names <- c()
@@ -2181,13 +2181,13 @@ eval_expectand_pushforwards <- function(expectand_vals_list,
   pushforward_vals <- lapply(expectand_list,
                              function(e) matrix(NA, nrow=C, ncol=S))
 
-
-  if (!is.null(alt_arg_names)) {
+  if (!is.null(alt_arg_names))
     alt_names <- lapply(nominal_arg_names,
                         function(name) alt_arg_names_array[[name]])
-  }
+
+  expectand_vals_env <- as.environment(expectand_vals_list)
   access_val <- function(name) {
-    expectand_vals_list[[name]][c, s]
+    expectand_vals_env[[name]][c, s]
   }
 
   for (c in 1:C) {

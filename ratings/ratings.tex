@@ -600,7 +600,7 @@ N_{C, m_{1} m_{2}}
 Next we compute \[
 \hat{\rho}_{m_{1} m_{2}}
 =
-\frac{ \hat{\Sigma}_{m_{1} m_{2}} }{ N_{C, m_{1} m_{2}} }
+\frac{ \hat{\Sigma}_{m_{1} m_{2}} }{ N_{C, m_{1} m_{2}} - 1 }
 \] for each pair of movies where \(N_{C, m_{1} m_{2}}\) is larger than
 \(7\).
 
@@ -2451,10 +2451,13 @@ parameterizations.
   \DataTypeTok{vector}\NormalTok{[N\_movies] gamma0 = tau\_gamma0 * gamma0\_ncp;}
 
   \CommentTok{// Centered customer movie affinities}
+  \DataTypeTok{matrix}\NormalTok{[N\_movies, N\_movies] Phi;}
   \DataTypeTok{array}\NormalTok{[N\_customers] }\DataTypeTok{vector}\NormalTok{[N\_movies] delta\_gamma;}
 \NormalTok{  \{}
     \DataTypeTok{matrix}\NormalTok{[N\_movies, N\_movies] L\_cov}
 \NormalTok{      = diag\_pre\_multiply(tau\_delta\_gamma, L\_delta\_gamma);}
+
+\NormalTok{    Phi = L\_cov * L\_cov\textquotesingle{};}
     \ControlFlowTok{for}\NormalTok{ (c }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_customers)}
 \NormalTok{      delta\_gamma[c] = L\_cov * delta\_gamma\_ncp[c];}
 \NormalTok{  \}}
@@ -2922,17 +2925,35 @@ usual.
 
 The inferred correlations in the multivariate normal population model
 allow us to inform predictions for how a customer would react to unrated
-movies given the movies they have rated. Unfortunately the \[
-\frac{ N_{\text{movies}} (N_{\text{movies}} - 1) }{ 2 }
-=
-19900
-\] correlation matrix elements are a bit too ungainly to examine
-individually.
+movies given the movies they have rated. While most of the correlations
+are consistent with zero many are large enough to be resolved even from
+this limited data set.
 
-It's more practical, not to mention more interpretable, to instead
-investigate the consequence of these correlations. In particular we can
-look at the movie affinities for each customer by adding together the
-common baselines with their individual preferences. Here we'll consider
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{mar=}\FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{5}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{))}
+
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(samples4, }\StringTok{\textquotesingle{}Phi\textquotesingle{}}\NormalTok{, }\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{, }\FloatTok{0.01}\NormalTok{,}
+                         \AttributeTok{xlab=}\StringTok{"Movie{-}wise Affinity Correlations"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
+"predictive value"): 136930 predictive values (0.1%) fell below the binning.
+\end{verbatim}
+
+\begin{verbatim}
+Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
+"predictive value"): 543674 predictive values (0.3%) fell above the binning.
+\end{verbatim}
+
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-71-1.pdf}
+
+It's more practical, not to mention more interpretable, to investigate
+the consequence of these correlations. In particular we can look at the
+movie affinities for each customer by adding together the common
+baselines with their individual preferences. Here we'll consider
 Customer 23.
 
 \begin{Shaded}
@@ -2957,7 +2978,7 @@ Customer 23.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-71-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-72-1.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2998,7 +3019,7 @@ Customer 23.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-73-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-74-1.pdf}
 
 Even better we can separately visualize the movie affinities that are
 directly informed by observed ratings and those informed by only the
@@ -3035,7 +3056,7 @@ but also much more uniform.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-74-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-75-1.pdf}
 
 The immediate benefit of modeling individual preferences is that we can
 now make movie recommendations bespoke to Customer 23.
@@ -3068,7 +3089,7 @@ now make movie recommendations bespoke to Customer 23.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-76-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-77-1.pdf}
 
 From this we can infer what movies we think Customer 23 will like the
 least.
@@ -3169,7 +3190,7 @@ recommendations given the large uncertainties.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-81-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-82-1.pdf}
 
 One subtlety with recommendations is that in most applications we cannot
 evaluate their performance directly. For example absent any additional
@@ -3231,7 +3252,7 @@ actual rankings.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-83-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-84-1.pdf}
 
 Interestingly we don't actually predict a high rating for our top
 recommendation. In hindsight, however, this shouldn't be unexpected
@@ -3247,7 +3268,7 @@ given how austere Customer 23 is with their stars.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-84-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-85-1.pdf}
 
 Another benefit of this hierarchical approach is that we are not limited
 to making inferences and predictions for existing customers. In
@@ -3299,7 +3320,7 @@ model evaluations were needed per iteration, in our last fit.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-85-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-86-1.pdf}
 
 Despite the complexity of the final model the numerical Hamiltonian
 trajectories weren't all that long. Even in an ideal case we can't do do

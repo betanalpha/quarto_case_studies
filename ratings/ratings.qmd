@@ -398,7 +398,7 @@ Next we compute
 $$
 \hat{\rho}_{m_{1} m_{2}}
 =
-\frac{ \hat{\Sigma}_{m_{1} m_{2}} }{ N_{C, m_{1} m_{2}} }
+\frac{ \hat{\Sigma}_{m_{1} m_{2}} }{ N_{C, m_{1} m_{2}} - 1 }
 $$
 for each pair of movies where $N_{C, m_{1} m_{2}}$ is larger than $7$.
 
@@ -1653,19 +1653,22 @@ util$plot_expectand_pushforward(samples4[[name]],
 
 The inferred correlations in the multivariate normal population model
 allow us to inform predictions for how a customer would react to unrated
-movies given the movies they have rated.  Unfortunately the
-$$
-\frac{ N_{\text{movies}} (N_{\text{movies}} - 1) }{ 2 }
-=
-19900
-$$
-correlation matrix elements are a bit too ungainly to examine
-individually.
+movies given the movies they have rated.  While most of the correlations
+are consistent with zero many are large enough to be resolved even from
+this limited data set.
 
-It's more practical, not to mention more interpretable, to instead
-investigate the consequence of these correlations.  In particular we can
-look at the movie affinities for each customer by adding together the
-common baselines with their individual preferences.  Here we'll consider
+```{r}
+#| cache: true
+par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
+
+util$plot_hist_quantiles(samples4, 'Phi', -1, 1, 0.01,
+                         xlab="Movie-wise Affinity Correlations")
+```
+
+It's more practical, not to mention more interpretable, to investigate
+the consequence of these correlations.  In particular we can look at the
+movie affinities for each customer by adding together the common
+baselines with their individual preferences.  Here we'll consider
 Customer 23.
 
 ```{r}

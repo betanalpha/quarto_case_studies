@@ -349,7 +349,6 @@ plot_hist_quantiles <- function(samples, val_name_prefix,
   probs <- c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
   counts <- rep(NA, B)
-  quantiles <- matrix(0, nrow=9, ncol=B)
 
   bin_count <- function(x, b_low, b_high) {
     sum(b_low <= x & x < b_high)
@@ -368,10 +367,8 @@ plot_hist_quantiles <- function(samples, val_name_prefix,
       counts[b] = bin_counters[[b]](baseline_values)
   }
 
-  filtered_samples <- filter_expectands(samples, names)
-
   bin_count_samples <-
-    util$eval_expectand_pushforwards(filtered_samples,
+    util$eval_expectand_pushforwards(samples,
                                      bin_counters,
                                      list('x'=array(names)))
 

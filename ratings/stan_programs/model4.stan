@@ -58,10 +58,13 @@ transformed parameters {
   vector[N_movies] gamma0 = tau_gamma0 * gamma0_ncp;
 
   // Centered customer movie affinities
+  matrix[N_movies, N_movies] Phi;
   array[N_customers] vector[N_movies] delta_gamma;
   {
     matrix[N_movies, N_movies] L_cov
       = diag_pre_multiply(tau_delta_gamma, L_delta_gamma);
+
+    Phi = L_cov * L_cov';
     for (c in 1:N_customers)
       delta_gamma[c] = L_cov * delta_gamma_ncp[c];
   }
