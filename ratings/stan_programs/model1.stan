@@ -1,28 +1,23 @@
 functions {
-  real induced_dirichlet_lpdf(vector c, vector alpha, real phi) {
+  // Log probability density function over cut point
+  // induced by a Dirichlet probability density function
+  // over baseline probabilities and latent logistic
+  // density function.
+  real induced_dirichlet_lpdf(vector c, vector alpha) {
     int K = num_elements(c) + 1;
-    vector[K - 1] sigma = inv_logit(phi - c);
-    vector[K] p;
-    matrix[K, K] J = rep_matrix(0, K, K);
-    
-    // Induced ordinal probabilities
-    p[1] = 1 - sigma[1];
-    for (k in 2:(K - 1))
-      p[k] = sigma[k - 1] - sigma[k];
-    p[K] = sigma[K - 1];
-    
-    // Baseline column of Jacobian
-    for (k in 1:K) J[k, 1] = 1;
-    
-    // Diagonal entries of Jacobian
-    for (k in 2:K) {
-      real rho = sigma[k - 1] * (1 - sigma[k - 1]);
-      J[k,     k] = - rho;
-      J[k - 1, k] = + rho;
+    vector[K - 1] Pi = inv_logit(c);
+    vector[K] p = append_row(Pi, [1]') - append_row([0]', Pi);
+
+    // Log Jacobian correction
+    real logJ = 0;
+    for (k in 1:(K - 1)) {
+      if (c[k] >= 0)
+        logJ += -c[k] - 2 * log(1 + exp(-c[k]));
+      else
+        logJ += +c[k] - 2 * log(1 + exp(+c[k]));
     }
-    
-    return   dirichlet_lpdf(p | alpha)
-           + log_determinant(J);
+
+    return dirichlet_lpdf(p | alpha) + logJ;
   }
 }
 
@@ -54,7 +49,7 @@ model {
   gamma_ncp ~ normal(0, 1);
   tau_gamma ~ normal(0, 5 / 2.57);
 
-  cut_points ~ induced_dirichlet(rep_vector(1, 5), 0);
+  cut_points ~ induced_dirichlet(rep_vector(1, 5));
 
   // Observational model
   ratings ~ ordered_logistic(gamma[movie_idxs], cut_points);

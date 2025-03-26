@@ -181,7 +181,7 @@ Program}
 
 \title{Bae's Theorem}
 \author{Michael Betancourt}
-\date{November 2024}
+\date{December 2024}
 
 \begin{document}
 \maketitle
@@ -195,7 +195,7 @@ Program}
 In 2006 Netflix announced the infamous
 \href{https://web.archive.org/web/20200510213032/https://www.netflixprize.com/assets/rules.pdf}{Netflix
 Prize}. The competition challenged anyone to use a data set of customer
-movie reviews to inform predictions of a second, held-out set of
+movie reviews to inform predictions for a second, held-out set of
 customer movie reviews. Superficially the Netflix challenge was a mixed
 success, although from a broader perspective it demonstrated the perils
 of poorly-chosen metrics for predictive performance and the subtleties
@@ -214,13 +214,13 @@ and sometimes even three star ratings.
 In addition to the idiosyncratic rating scales any analysis of this data
 also has to contend with idiosyncratic customer preferences. Because not
 every customer will agree on the quality of a given movie we have to
-decide whether we want to try to learn an aggregate preference or the
-individual customer preferences.
+decide whether we want to try to learn an aggregate preference across
+the entire population or the individual customer preferences.
 
-In this chapter I will develop a Bayesian analysis of a subset of the
-Netflix training data set, not in an attempt to win the Netflix Prize
-decades too late but rather to demonstrate some of these common analysis
-challenges.
+In this chapter I develop a Bayesian analysis of a subset of the Netflix
+training data set, not in an attempt to win the Netflix Prize decades
+too late but rather to demonstrate some strategies for approaching these
+analysis challenges.
 
 Importantly this analysis will not be the first time that Netflix has
 been associated with Bayesian inference. In 2016 Amy Hogan
@@ -270,14 +270,14 @@ and five ``stars'', with one being the worst rating and five being the
 best. The observed ratings spanned 480,189 anonymized customers and
 17,770 movies.
 
-To allow for a more manageable analysis I reduced the full data set by
-considering only the first 1000 movies and then randomly subsampling 100
-customers and 200 movies with probabilities proportional to the total
-number of ratings. This left 2,415 total ratings.
+To allow for a more manageable demonstration I reduced the full data set
+by considering only the first 1000 movies and then randomly subsampling
+100 customers and 200 movies with probabilities proportional to the
+total number of ratings. This left 2,415 total ratings.
 
-Finally to facilitate modeling and add another layer of anonymizing
-obfuscating I relabeled the selected customers and movies with
-contiguous indices.
+Finally to facilitate model implementations, and add another layer of
+anonymizing obfuscating, I relabeled the selected customers and movies
+with contiguous indices.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -311,10 +311,10 @@ contiguous indices.
 2415 Total Ratings
 \end{verbatim}
 
-Despite favoring customers with more ratings in the data subsampling
-most of the selected customers still rated only a few movies. Overall
-the training data set is relatively sparse, with only a few customers
-contributing most of the ratings.
+Despite the data subsampling favoring customers with more ratings, most
+of the selected customers rated only a few movies. Overall the training
+data set is relatively sparse, with only a few customers contributing
+most of the ratings.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -372,8 +372,8 @@ pairings.
 The observed ratings are slightly biased towards large values, with far
 more four star ratings than two star ratings. From the data alone,
 however, we cannot determine whether or not this is because most movies
-that had been rated were really good or because most customers were just
-generous with their ratings.
+that had been rated were relatively good or because most customers were
+just generous with their ratings.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -386,8 +386,8 @@ generous with their ratings.
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-9-1.pdf}
 
-That said there is substantial heterogeneity in the ratings across
-customers. Customer 70, for example, gave many high ratings while
+That said there is substantial heterogeneity in the rating behavior
+across customers. Customer 70, for example, gave many high ratings while
 Customer 23 gave many low ratings.
 
 \begin{Shaded}
@@ -405,7 +405,7 @@ Customer 23 gave many low ratings.
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-10-1.pdf}
 
 Similarly we see strong variation in the observed ratings across movies.
-Movies 117 and 180 are particularly well-reviewed.
+Movies 117 and 180, for example, are particularly well-reviewed.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -423,13 +423,33 @@ Movies 117 and 180 are particularly well-reviewed.
 
 When critiquing any model of these ratings we want to be able to
 interrogate this variation in rating behavior across customers and
-movies. Even with the subsampled data, however, a histogram of ratings
-for each customer and movie would be too ungainly.
+movies. Even with the subsampled data, however, visualizing a histogram
+of ratings for each customer and movie would be far too ungainly. A more
+scalable, albeit less informative, approach is to compute a scalar
+summary of the ratings within each group, and then construct a histogram
+of those \textbf{stratified} summaries.
 
-One alternative approach is to compute a scalar summary of the ratings
-within each group, and then construct a histogram of those
-\textbf{stratified} values. For example we might consider histograms of
-empirical means stratified by customer or movie.
+The only problem here is identifying useful summary statistics. Because
+ordinal spaces are not equipped with a distinguished metric empirical
+moments are ill-defined; in particular given any order-preserving map \[
+f : \{ 1, 2, 3, 4, 5 \} \rightarrow \mathbb{R}
+\] we can construct a \emph{distinct} empirical mean, \[
+\hat{mu}_{f} = \frac{1}{N} \sum_{n = 1}^{N} f(r_{n}),
+\] and corresponding higher-order empirical moments.
+
+That said, most of these empirical moments share similar qualitative
+behaviors. If a stratified histogram is peaked towards central values,
+for example, then most empirical means will end up somewhere near that
+peak. Even if empirical moments capture different behaviors, however,
+they can still be useful for comparing observed and posterior predictive
+behaviors.
+
+For this case study I'll assume a metric with equal unit distances
+between neighboring ordinal elements, with the resulting empirical mean
+\[
+\hat{mu}_{f} = \frac{1}{N} \sum_{n = 1}^{N} r_{n}.
+\] We can then stratify this mean by customers and movies and histogram
+the resulting ensemble of summaries.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -457,11 +477,13 @@ empirical means stratified by customer or movie.
 Of course an empirical mean captures only some of the rating behavior
 within each strata. We can capture more with a summary that is sensitive
 to the dispersion of ratings in each strata, such as the empirical
-variance or empirical entropy.
+variance or empirical entropy. Note one nice advantage of the empirical
+entropy relative to the empirical variance is that it does not require a
+choice of metric over the ordinal values.
 
-Here let's go with the empirical variance, or rather a modified
-empirical variance that defaults to zero when a strata consists of only
-one value.
+Here let's go with the empirical variance based on the same assumptions
+as our empirical mean, or rather a modified empirical variance that
+defaults to zero when a strata consists of only one value.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -505,8 +527,9 @@ has at most one rating, and most have no ratings, we can't just stratify
 summary statistics by both customer and movie.
 
 One potential compromise is to construct empirical covariances for each
-pair of customers or movies. For example the empirical covariance
-between two movies \(m_{1}\) and \(m_{2}\) is defined by \[
+pair of customers or movies. For example given our assumed metric the
+empirical covariance between two movies \(m_{1}\) and \(m_{2}\) is
+defined by \[
 \hat{\rho}_{m_{1} m_{2}}
 =
 \hat{\rho}_{m_{2} m_{1}}
@@ -519,16 +542,19 @@ given to movie \(m\) by customer \(c\), and \[
 \hat{\mu}_{m}
 =
 \frac{1}{N_{C}} \sum_{c = 1}^{N_{C}} r_{c m}.
-\] The immediate issue is that, because not every customer rates every
-movie, many of the \(r_{c m}\) in these sums will be undefined.
+\]
 
-All we can do is limit the sums to the customers who have rated both
-movies. More formally let \(\mathsf{c}_{m}\) denote the set of customers
-who have rated movie \(m\) and \(N_{C, m}\) denote the number of
-elements in that set. Similarly let \(\mathsf{c}_{m_{1} m_{2}}\) denote
-the set of customers who have rated \emph{both} movies \(m_{1}\) and
-\(m_{2}\) with \(N_{C, m_{1} m_{2}}\) the number of elements in that
-set. Then we can define \[
+The immediate issue is that, because not every customer rates every
+movie, many of the \(r_{c m}\) in these sums will be undefined. All we
+can do here is limit the sums to the customers who have rated both
+movies.
+
+More formally let \(\mathsf{c}_{m}\) denote the set of customers who
+have rated movie \(m\) and \(N_{C, m}\) denote the number of elements in
+that set. Similarly let \(\mathsf{c}_{m_{1} m_{2}}\) denote the set of
+customers who have rated \emph{both} movies \(m_{1}\) and \(m_{2}\) with
+\(N_{C, m_{1} m_{2}}\) the number of elements in that set. Then we can
+define \[
 \hat{\rho}_{m_{1} m_{2}}
 =
 \hat{\rho}_{m_{2} m_{1}}
@@ -652,48 +678,40 @@ now and have them ready.
 \end{Shaded}
 
 All of this said I think that there is still a lot of opportunity for
-better summary statistics in applications like these.
+better summary statistics in applications like these, such as summaries
+that are more compatible with the structure of an ordinal space and
+don't require the assumption of an arbitrary metric and summaries that
+better capture couplings between different strata.
 
 \section{Homogeneous Customer Model}\label{homogeneous-customer-model}
 
 Now that we've familiarized ourselves with the data we can make our
 first attempt at modeling the data generating process that, well,
-generated it.
+generated it. Our models will be built on a foundation of
+\href{https://betanalpha.github.io/assets/chapters_html/ordinal_modeling.html}{ordinal
+pairwise comparison modeling techniques}.
 
-First and foremost we need to account for both the ordering and
-discreteness of the five star rating system. Fortunately this is
-straightforward with the latent cut point construction that I discuss in
-my
-\href{https://betanalpha.github.io/assets/case_studies/ordinal_regression.html}{chapter
-on ordinal modeling}. At the same time we can use the induced Dirichlet
-prior model to avoid any unreasonable behavior in those cut points.
+Given a latent logistic probability density function we will use cut
+points to derive baseline ordinal probabilities for each star rating.
+This baseline will not be tied to any particular movie but rather a
+hypothetical default movie implied by the configuration of an induced
+Dirichlet prior model.
 
-We can then model the consumer preference for each movie with a separate
-affinity parameter that shifts the latent probability density function
-relative to the fixed cut points, and hence the induced probabilities
-for each rating. Note that we can interpret this construction as a
-bipartide
-\href{https://betanalpha.github.io/assets/chapters_html/pairwise_comparison_modeling.html}{pair-wise
-comparison model} that contrasts the austerity of customers to the
-quality of each movie.
+Next we will assume that movies systematically shift these baseline
+probabilities to lower or higher ratings depending on their quality.
+This is implemented with affinity parameters for each movie that shift
+the latent logistic probability density function, and hence the derived
+ordinal probabilities, based on customer preference. Initially we will
+assume that the rating behavior is homogeneous across customers so that
+we need only a single set of cut points to model all of the data.
 
-The subtlety with this interpretation is that the customer austerity is
-not a separate parameter but rather implicit in the translation freedom
-of the cut points. Setting the anchor point in the induced Dirichlet
-prior model to zero effectively removes this translation freedom and
-centers the customer austerity around zero.
-
-Initially we will assume that the customer behavior is homogeneous so
-that we need only a single set of cut points. On the other hand each
-movie needs to be modeled with a distinct affinity parameter.
-
-Instead of modeling those parameters independently we will assume that
-our domain expertise about the movies is exchangeable so that we can
-model with hierarchically. To avoid degeneracy in the pair-wise
-comparisons we will need to anchor the population location to zero, the
-same anchor location used in the induced Dirichlet prior model. Finally
-we will begin with a monolithic non-centered parameterization given the
-sparsity of observed ratings.
+Lastly assuming that our domain expertise about consumer preferences is
+exchangeable we will model the movie affinity parameters hierarchically.
+To avoid degeneracy in the customer-movie comparisons we will need to
+anchor the population location of this hierarchical model to zero, the
+same anchor location used in the induced Dirichlet prior model. Given
+the sparsity of observed ratings we'll implement this hierarchical model
+with a monolithic non-centered parameterization.
 
 \begin{codelisting}
 
@@ -702,30 +720,25 @@ sparsity of observed ratings.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{functions}\NormalTok{ \{}
-  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha, }\DataTypeTok{real}\NormalTok{ phi) \{}
+  \CommentTok{// Log probability density function over cut point}
+  \CommentTok{// induced by a Dirichlet probability density function}
+  \CommentTok{// over baseline probabilities and latent logistic}
+  \CommentTok{// density function.}
+  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha) \{}
     \DataTypeTok{int}\NormalTok{ K = num\_elements(c) + }\DecValTok{1}\NormalTok{;}
-    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] sigma = inv\_logit(phi {-} c);}
-    \DataTypeTok{vector}\NormalTok{[K] p;}
-    \DataTypeTok{matrix}\NormalTok{[K, K] J = rep\_matrix(}\DecValTok{0}\NormalTok{, K, K);}
-    
-    \CommentTok{// Induced ordinal probabilities}
-\NormalTok{    p[}\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{ {-} sigma[}\DecValTok{1}\NormalTok{];}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{))}
-\NormalTok{      p[k] = sigma[k {-} }\DecValTok{1}\NormalTok{] {-} sigma[k];}
-\NormalTok{    p[K] = sigma[K {-} }\DecValTok{1}\NormalTok{];}
-    
-    \CommentTok{// Baseline column of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:K) J[k, }\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{;}
-    
-    \CommentTok{// Diagonal entries of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:K) \{}
-      \DataTypeTok{real}\NormalTok{ rho = sigma[k {-} }\DecValTok{1}\NormalTok{] * (}\DecValTok{1}\NormalTok{ {-} sigma[k {-} }\DecValTok{1}\NormalTok{]);}
-\NormalTok{      J[k,     k] = {-} rho;}
-\NormalTok{      J[k {-} }\DecValTok{1}\NormalTok{, k] = + rho;}
+    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] Pi = inv\_logit(c);}
+    \DataTypeTok{vector}\NormalTok{[K] p = append\_row(Pi, [}\DecValTok{1}\NormalTok{]\textquotesingle{}) {-} append\_row([}\DecValTok{0}\NormalTok{]\textquotesingle{}, Pi);}
+
+    \CommentTok{// Log Jacobian correction}
+    \DataTypeTok{real}\NormalTok{ logJ = }\DecValTok{0}\NormalTok{;}
+    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{)) \{}
+      \ControlFlowTok{if}\NormalTok{ (c[k] \textgreater{}= }\DecValTok{0}\NormalTok{)}
+\NormalTok{        logJ += {-}c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp({-}c[k]));}
+      \ControlFlowTok{else}
+\NormalTok{        logJ += +c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp(+c[k]));}
 \NormalTok{    \}}
-    
-    \ControlFlowTok{return}\NormalTok{   dirichlet\_lpdf(p | alpha)}
-\NormalTok{           + log\_determinant(J);}
+
+    \ControlFlowTok{return}\NormalTok{ dirichlet\_lpdf(p | alpha) + logJ;}
 \NormalTok{  \}}
 \NormalTok{\}}
 
@@ -757,7 +770,7 @@ sparsity of observed ratings.
 \NormalTok{  gamma\_ncp \textasciitilde{} normal(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{);}
 \NormalTok{  tau\_gamma \textasciitilde{} normal(}\DecValTok{0}\NormalTok{, }\DecValTok{5}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
 
-\NormalTok{  cut\_points \textasciitilde{} induced\_dirichlet(rep\_vector(}\DecValTok{1}\NormalTok{, }\DecValTok{5}\NormalTok{), }\DecValTok{0}\NormalTok{);}
+\NormalTok{  cut\_points \textasciitilde{} induced\_dirichlet(rep\_vector(}\DecValTok{1}\NormalTok{, }\DecValTok{5}\NormalTok{));}
 
   \CommentTok{// Observational model}
 \NormalTok{  ratings \textasciitilde{} ordered\_logistic(gamma[movie\_idxs], cut\_points);}
@@ -913,8 +926,8 @@ aggregate ratings.
 On the other hand the retrodictive performance is much worse if we look
 at individual customer behaviors. In particular there is much more
 heterogeneity in the observed data than what the model can reproduce,
-which makes sense given that we explicitly assumed homogeneous customer
-behavior.
+which isn't surprising given that we explicitly assumed homogeneous
+customer behavior.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -938,8 +951,8 @@ behavior.
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-22-1.pdf}
 
 On the other hand the model doesn't seem to have a problem capturing the
-heterogeneity in the observed ratings across movies, at least for this
-quick spot check.
+heterogeneity in the observed ratings stratified across movies, at least
+for this quick spot check.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -962,15 +975,16 @@ quick spot check.
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-23-1.pdf}
 
-To really investigate the variation in retrodictive performance,
-however, we need to look beyond just a few customers and movies. Instead
-we can examine the behavior of all customers and movies at the same time
-with histograms of stratified summary statistics.
+To better investigate the variation in retrodictive performance,
+however, we need to look beyond just a few customers and movies. We can
+examine the behavior of all customers and movies at the same time with
+histograms of the stratified summary statistics we discussed above.
 
 Here we see that the posterior predictive behavior of the customer-wise
-means are more narrowly distributed than what we see in the observed
-data. At the same time the posterior predictive customer-wise variances
-concentrate at larger values than the observed customer-wise variances.
+empirical means are more narrowly distributed than what we see in the
+observed data. At the same time the posterior predictive customer-wise
+empirical variances concentrate at larger values than the observed
+customer-wise empirical variances.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -995,7 +1009,7 @@ concentrate at larger values than the observed customer-wise variances.
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 232 predictive values (0.1%) fell above the binning.
+"predictive value"): 239 predictive values (0.1%) fell above the binning.
 \end{verbatim}
 
 \begin{Shaded}
@@ -1009,13 +1023,14 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 1348 predictive values (0.2%) fell above the binning.
+"predictive value"): 1287 predictive values (0.2%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-24-1.pdf}
 
-Finally the collection of selected movie covariances appears to be more
-heavy-tailed in the observed data relative to the posterior predictions.
+Finally the collection of selected movie empirical covariances appears
+to be more heavy-tailed in the observed data relative to the posterior
+predictions.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1034,12 +1049,12 @@ heavy-tailed in the observed data relative to the posterior predictions.
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 282 predictive values (0.0%) fell below the binning.
+"predictive value"): 273 predictive values (0.0%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 2310 predictive values (0.0%) fell above the binning.
+"predictive value"): 2329 predictive values (0.0%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-25-1.pdf}
@@ -1049,8 +1064,9 @@ Model}\label{independent-heterogeneous-customer-model}
 
 All of our retrodictive checks tell a consistent story -- customers do
 not rate movies the same way as each other. Fortunately it's
-straightforward to just model each customer's idiosyncratic behavior
-with their own set of cut points.
+straightforward to model each customer's idiosyncratic behavior by
+allowing them with their own set of cut points, and hence baseline
+rating probabilities.
 
 \begin{codelisting}
 
@@ -1059,30 +1075,25 @@ with their own set of cut points.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{functions}\NormalTok{ \{}
-  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha, }\DataTypeTok{real}\NormalTok{ phi) \{}
+  \CommentTok{// Log probability density function over cut point}
+  \CommentTok{// induced by a Dirichlet probability density function}
+  \CommentTok{// over baseline probabilities and latent logistic}
+  \CommentTok{// density function.}
+  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha) \{}
     \DataTypeTok{int}\NormalTok{ K = num\_elements(c) + }\DecValTok{1}\NormalTok{;}
-    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] sigma = inv\_logit(phi {-} c);}
-    \DataTypeTok{vector}\NormalTok{[K] p;}
-    \DataTypeTok{matrix}\NormalTok{[K, K] J = rep\_matrix(}\DecValTok{0}\NormalTok{, K, K);}
-    
-    \CommentTok{// Induced ordinal probabilities}
-\NormalTok{    p[}\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{ {-} sigma[}\DecValTok{1}\NormalTok{];}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{))}
-\NormalTok{      p[k] = sigma[k {-} }\DecValTok{1}\NormalTok{] {-} sigma[k];}
-\NormalTok{    p[K] = sigma[K {-} }\DecValTok{1}\NormalTok{];}
-    
-    \CommentTok{// Baseline column of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:K) J[k, }\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{;}
-    
-    \CommentTok{// Diagonal entries of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:K) \{}
-      \DataTypeTok{real}\NormalTok{ rho = sigma[k {-} }\DecValTok{1}\NormalTok{] * (}\DecValTok{1}\NormalTok{ {-} sigma[k {-} }\DecValTok{1}\NormalTok{]);}
-\NormalTok{      J[k,     k] = {-} rho;}
-\NormalTok{      J[k {-} }\DecValTok{1}\NormalTok{, k] = + rho;}
+    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] Pi = inv\_logit(c);}
+    \DataTypeTok{vector}\NormalTok{[K] p = append\_row(Pi, [}\DecValTok{1}\NormalTok{]\textquotesingle{}) {-} append\_row([}\DecValTok{0}\NormalTok{]\textquotesingle{}, Pi);}
+
+    \CommentTok{// Log Jacobian correction}
+    \DataTypeTok{real}\NormalTok{ logJ = }\DecValTok{0}\NormalTok{;}
+    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{)) \{}
+      \ControlFlowTok{if}\NormalTok{ (c[k] \textgreater{}= }\DecValTok{0}\NormalTok{)}
+\NormalTok{        logJ += {-}c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp({-}c[k]));}
+      \ControlFlowTok{else}
+\NormalTok{        logJ += +c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp(+c[k]));}
 \NormalTok{    \}}
-    
-    \ControlFlowTok{return}\NormalTok{   dirichlet\_lpdf(p | alpha)}
-\NormalTok{           + log\_determinant(J);}
+
+    \ControlFlowTok{return}\NormalTok{ dirichlet\_lpdf(p | alpha) + logJ;}
 \NormalTok{  \}}
 \NormalTok{\}}
 
@@ -1114,7 +1125,7 @@ with their own set of cut points.
 \NormalTok{  tau\_gamma \textasciitilde{} normal(}\DecValTok{0}\NormalTok{, }\DecValTok{5}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
 
   \ControlFlowTok{for}\NormalTok{ (c }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_customers)}
-\NormalTok{    cut\_points[c] \textasciitilde{} induced\_dirichlet(rep\_vector(}\DecValTok{1}\NormalTok{, }\DecValTok{5}\NormalTok{), }\DecValTok{0}\NormalTok{);}
+\NormalTok{    cut\_points[c] \textasciitilde{} induced\_dirichlet(rep\_vector(}\DecValTok{1}\NormalTok{, }\DecValTok{5}\NormalTok{));}
 
   \CommentTok{// Observational model}
   \ControlFlowTok{for}\NormalTok{ (n }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_ratings) \{}
@@ -1216,12 +1227,12 @@ with their own set of cut points.
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{fit }\OtherTok{\textless{}{-}} \FunctionTok{stan}\NormalTok{(}\AttributeTok{file=}\StringTok{"stan\_programs/model2.stan"}\NormalTok{,}
-            \AttributeTok{data=}\NormalTok{data, }\AttributeTok{seed=}\DecValTok{8438338}\NormalTok{,}
+            \AttributeTok{data=}\NormalTok{data, }\AttributeTok{seed=}\DecValTok{8438330}\NormalTok{,}
             \AttributeTok{warmup=}\DecValTok{1000}\NormalTok{, }\AttributeTok{iter=}\DecValTok{2024}\NormalTok{, }\AttributeTok{refresh=}\DecValTok{0}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
-Frustratingly the computation suffers from a few stray divergences.
+Frustratingly, the computation suffers from a few stray divergences.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1231,13 +1242,7 @@ Frustratingly the computation suffers from a few stray divergences.
 \end{Shaded}
 
 \begin{verbatim}
-  Chain 1: 1 of 1024 transitions (0.1%) diverged.
-
-  Chain 2: 6 of 1024 transitions (0.6%) diverged.
-
-  Chain 3: 2 of 1024 transitions (0.2%) diverged.
-
-  Chain 4: 1 of 1024 transitions (0.1%) diverged.
+  Chain 4: 2 of 1024 transitions (0.2%) diverged.
 
   Divergent Hamiltonian transitions result from unstable numerical
 trajectories.  These instabilities are often due to degenerate target
@@ -1265,10 +1270,10 @@ Markov chain Monte Carlo estimation.
 \end{verbatim}
 
 One possibility is that the replicated cut points are messing with the
-hierarchical geometry of the movie affinities. The movie affinities most
-susceptible to degenerate behavior in a non-centered parameterization
-are those with the most ratings, and those do not exhibit any obvious
-geometric pathologies.
+hierarchical geometry of the movie affinities. That said the movie
+affinities most susceptible to degenerate behavior in a non-centered
+parameterization are those with the most ratings, and those do not
+exhibit any obvious geometric pathologies.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1291,7 +1296,7 @@ if this ends up being our final model.
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{fit }\OtherTok{\textless{}{-}} \FunctionTok{stan}\NormalTok{(}\AttributeTok{file=}\StringTok{"stan\_programs/model2.stan"}\NormalTok{,}
-            \AttributeTok{data=}\NormalTok{data, }\AttributeTok{seed=}\DecValTok{8438338}\NormalTok{,}
+            \AttributeTok{data=}\NormalTok{data, }\AttributeTok{seed=}\DecValTok{8438330}\NormalTok{,}
             \AttributeTok{warmup=}\DecValTok{1000}\NormalTok{, }\AttributeTok{iter=}\DecValTok{2024}\NormalTok{, }\AttributeTok{refresh=}\DecValTok{0}\NormalTok{,}
             \AttributeTok{control=}\FunctionTok{list}\NormalTok{(}\StringTok{\textquotesingle{}adapt\_delta\textquotesingle{}}\OtherTok{=}\FloatTok{0.9}\NormalTok{))}
 \end{Highlighting}
@@ -1398,8 +1403,9 @@ spot check.
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-33-1.pdf}
 
 Do the histograms of stratified summary statistics tell a similar story?
-The retrodictive tension in the customer-wise means and variances has
-decreased, although some remains in the variances.
+The retrodictive tension in the customer-wise empirical means and
+empirical variances has decreased, although some remains in the
+empirical variances.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1424,7 +1430,7 @@ decreased, although some remains in the variances.
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 390 predictive values (0.1%) fell above the binning.
+"predictive value"): 400 predictive values (0.1%) fell above the binning.
 \end{verbatim}
 
 \begin{Shaded}
@@ -1438,13 +1444,13 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 2586 predictive values (0.3%) fell above the binning.
+"predictive value"): 2589 predictive values (0.3%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-34-1.pdf}
 
 Moreover the retrodictive tension in the collection of selected movie
-covariances remains.
+empirical covariances remains.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1463,20 +1469,20 @@ covariances remains.
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 363 predictive values (0.0%) fell below the binning.
+"predictive value"): 370 predictive values (0.0%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 280 predictive values (0.0%) fell above the binning.
+"predictive value"): 248 predictive values (0.0%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-35-1.pdf}
 
-If we were content with this mild retrodictive tensions then we would
+If we were content with these mild retrodictive tensions then we would
 move on to exploring the posterior inferences themselves. For example we
-could visualize the marginal posterior inferences for the cut points of
-each customer.
+could visualize the marginal posterior inferences for the interior cut
+points of each customer.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1495,11 +1501,11 @@ each customer.
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-36-1.pdf}
 
-The component cut points are a bit more interpretable when visualized
-together, especially when comparing customers. For example to compare
-Customer 23 and Customer 70 we might overlay the marginal posterior
-visualizations of the four component cut points of each customer in
-adjacent plots.
+The interior cut points are a bit more interpretable when visualized
+together, especially when comparing different customers. For example to
+compare Customer 23 and Customer 70 we might overlay the marginal
+posterior visualizations of the four interior cut points of each
+customer in adjacent plots.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1514,7 +1520,8 @@ adjacent plots.
 \NormalTok{name }\OtherTok{\textless{}{-}}\FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}cut\_points[\textquotesingle{}}\NormalTok{, c, }\StringTok{\textquotesingle{},\textquotesingle{}}\NormalTok{, k, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples2[[name]],}
                                 \DecValTok{50}\NormalTok{, }\AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{9}\NormalTok{, }\DecValTok{9}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{2}\NormalTok{),}
-                                \AttributeTok{col=}\NormalTok{cols[k], }\AttributeTok{display\_name=}\StringTok{\textquotesingle{}Cut Points\textquotesingle{}}\NormalTok{,}
+                                \AttributeTok{col=}\NormalTok{cols[k],}
+                                \AttributeTok{display\_name=}\StringTok{\textquotesingle{}Interior Cut Points\textquotesingle{}}\NormalTok{,}
                                 \AttributeTok{main=}\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Customer\textquotesingle{}}\NormalTok{, c))}
 
 
@@ -1528,7 +1535,7 @@ adjacent plots.
 
 \FunctionTok{text}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{1.65}\NormalTok{, }\StringTok{"cut\_points[1]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
 \FunctionTok{text}\NormalTok{(}\DecValTok{2}\NormalTok{, }\FloatTok{1.4}\NormalTok{, }\StringTok{"cut\_points[2]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid\_highlight)}
-\FunctionTok{text}\NormalTok{(}\DecValTok{4}\NormalTok{, }\DecValTok{1}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+\FunctionTok{text}\NormalTok{(}\DecValTok{4}\NormalTok{, }\FloatTok{1.1}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
 \FunctionTok{text}\NormalTok{(}\DecValTok{6}\NormalTok{, }\FloatTok{0.5}\NormalTok{, }\StringTok{"cut\_points[4]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark\_highlight)}
 
 \NormalTok{c }\OtherTok{\textless{}{-}} \DecValTok{70}
@@ -1537,14 +1544,15 @@ adjacent plots.
 \NormalTok{name }\OtherTok{\textless{}{-}}\FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}cut\_points[\textquotesingle{}}\NormalTok{, c, }\StringTok{\textquotesingle{},\textquotesingle{}}\NormalTok{, k, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples2[[name]],}
                                 \DecValTok{50}\NormalTok{, }\AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{9}\NormalTok{, }\DecValTok{9}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{2}\NormalTok{),}
-                                \AttributeTok{col=}\NormalTok{cols[k], }\AttributeTok{display\_name=}\StringTok{\textquotesingle{}Cut Points\textquotesingle{}}\NormalTok{,}
+                                \AttributeTok{col=}\NormalTok{cols[k],}
+                                \AttributeTok{display\_name=}\StringTok{\textquotesingle{}Interior Cut Points\textquotesingle{}}\NormalTok{,}
                                 \AttributeTok{main=}\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Customer\textquotesingle{}}\NormalTok{, c))}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in util$plot_expectand_pushforward(samples2[[name]], 50, flim = c(-9, :
-12 values (0.3%) fell below the histogram binning.
+8 values (0.2%) fell below the histogram binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -1562,9 +1570,9 @@ Warning in util$plot_expectand_pushforward(samples2[[name]], 50, flim = c(-9, :
                                   \AttributeTok{add=}\ConstantTok{TRUE}\NormalTok{)}
 \NormalTok{\}}
 
-\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{5.5}\NormalTok{, }\FloatTok{0.35}\NormalTok{, }\StringTok{"cut\_points[1]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
-\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{3}\NormalTok{, }\FloatTok{0.75}\NormalTok{, }\StringTok{"cut\_points[2]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid\_highlight)}
-\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{2}\NormalTok{, }\FloatTok{1.0}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{5.75}\NormalTok{, }\FloatTok{0.35}\NormalTok{, }\StringTok{"cut\_points[1]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{3}\NormalTok{, }\FloatTok{0.85}\NormalTok{, }\StringTok{"cut\_points[2]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid\_highlight)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{2}\NormalTok{, }\FloatTok{1.1}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
 \FunctionTok{text}\NormalTok{(}\FloatTok{1.0}\NormalTok{, }\FloatTok{1.25}\NormalTok{, }\StringTok{"cut\_points[4]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark\_highlight)}
 \end{Highlighting}
 \end{Shaded}
@@ -1573,7 +1581,7 @@ Warning in util$plot_expectand_pushforward(samples2[[name]], 50, flim = c(-9, :
 
 This allow us to see that Customer 23 is pretty stingy; a movie affinity
 needs to be pretty large in order for the probability of a large rating
-to be non-negligible. On the other hand Customer 70 is much more
+to become non-negligible. On the other hand Customer 70 is much more
 generous; they are likely to give even a mediocre movie a high rating.
 
 At the same time we can investigate the inferred affinities for each
@@ -1611,23 +1619,23 @@ At this point we need to address a stark asymmetry in the last model.
 Although we're accounting for heterogeneity in both customer and movie
 behaviors, we're modeling only the latter hierarchically. We don't have
 any domain expertise that obstructs the exchangeability of the customers
-so why don't we model the individual cut points hierarchically as well?
-All we need is an appropriate multivariate population model.
+so why don't we model the individual interior cut points hierarchically
+as well? All we need is an appropriate multivariate population model.
 
-Conveniently the induced Dirichlet prior naturally composes with a hyper
-Dirichlet population model that I discussed in my
+Conveniently the induced Dirichlet prior naturally composes with the
+hyper Dirichlet population model that I discussed in my
 \href{https://betanalpha.github.io/assets/chapters_html/die_fairness.html}{die
-fairness case study}. This makes for a natural cut point population
-model that pools each customer's ratings to a common distribution of
-rating probabilities.
+fairness case study}. This makes for a natural interior cut point
+population model that pools each customer's baseline ratings towards a
+common behavior.
 
-That said this is not the most general hierarchical model that we might
-consider. This model assumes that the heterogeneity in the cut points is
-independent of the heterogeneity in the movie affinities and more
+Note that this is not the most general hierarchical model that we might
+consider. This model assumes that the heterogeneity in the interior cut
+points is independent of the heterogeneity in the movie affinities; more
 generally those heterogeneities could be coupled together. That said I
-think that it is more than reasonable to assume that how each customer
-translates their preferences into a movie rating is independent from
-those preferences themselves.
+think that it is pretty reasonable to assume that how each customer
+translates their preferences into a movie rating is independent of those
+particular preferences.
 
 \begin{codelisting}
 
@@ -1636,30 +1644,25 @@ those preferences themselves.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{functions}\NormalTok{ \{}
-  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha, }\DataTypeTok{real}\NormalTok{ phi) \{}
+  \CommentTok{// Log probability density function over cut point}
+  \CommentTok{// induced by a Dirichlet probability density function}
+  \CommentTok{// over baseline probabilities and latent logistic}
+  \CommentTok{// density function.}
+  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha) \{}
     \DataTypeTok{int}\NormalTok{ K = num\_elements(c) + }\DecValTok{1}\NormalTok{;}
-    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] sigma = inv\_logit(phi {-} c);}
-    \DataTypeTok{vector}\NormalTok{[K] p;}
-    \DataTypeTok{matrix}\NormalTok{[K, K] J = rep\_matrix(}\DecValTok{0}\NormalTok{, K, K);}
-    
-    \CommentTok{// Induced ordinal probabilities}
-\NormalTok{    p[}\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{ {-} sigma[}\DecValTok{1}\NormalTok{];}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{))}
-\NormalTok{      p[k] = sigma[k {-} }\DecValTok{1}\NormalTok{] {-} sigma[k];}
-\NormalTok{    p[K] = sigma[K {-} }\DecValTok{1}\NormalTok{];}
-    
-    \CommentTok{// Baseline column of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:K) J[k, }\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{;}
-    
-    \CommentTok{// Diagonal entries of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:K) \{}
-      \DataTypeTok{real}\NormalTok{ rho = sigma[k {-} }\DecValTok{1}\NormalTok{] * (}\DecValTok{1}\NormalTok{ {-} sigma[k {-} }\DecValTok{1}\NormalTok{]);}
-\NormalTok{      J[k,     k] = {-} rho;}
-\NormalTok{      J[k {-} }\DecValTok{1}\NormalTok{, k] = + rho;}
+    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] Pi = inv\_logit(c);}
+    \DataTypeTok{vector}\NormalTok{[K] p = append\_row(Pi, [}\DecValTok{1}\NormalTok{]\textquotesingle{}) {-} append\_row([}\DecValTok{0}\NormalTok{]\textquotesingle{}, Pi);}
+
+    \CommentTok{// Log Jacobian correction}
+    \DataTypeTok{real}\NormalTok{ logJ = }\DecValTok{0}\NormalTok{;}
+    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{)) \{}
+      \ControlFlowTok{if}\NormalTok{ (c[k] \textgreater{}= }\DecValTok{0}\NormalTok{)}
+\NormalTok{        logJ += {-}c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp({-}c[k]));}
+      \ControlFlowTok{else}
+\NormalTok{        logJ += +c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp(+c[k]));}
 \NormalTok{    \}}
-    
-    \ControlFlowTok{return}\NormalTok{   dirichlet\_lpdf(p | alpha)}
-\NormalTok{           + log\_determinant(J);}
+
+    \ControlFlowTok{return}\NormalTok{ dirichlet\_lpdf(p | alpha) + logJ;}
 \NormalTok{  \}}
 \NormalTok{\}}
 
@@ -1701,7 +1704,7 @@ those preferences themselves.
 \NormalTok{  tau\_q \textasciitilde{} normal(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{);}
 
   \ControlFlowTok{for}\NormalTok{ (c }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_customers)}
-\NormalTok{    cut\_points[c] \textasciitilde{} induced\_dirichlet(alpha, }\DecValTok{0}\NormalTok{);}
+\NormalTok{    cut\_points[c] \textasciitilde{} induced\_dirichlet(alpha);}
 
   \CommentTok{// Observational model}
   \ControlFlowTok{for}\NormalTok{ (n }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_ratings) \{}
@@ -1808,9 +1811,9 @@ those preferences themselves.
 \end{Highlighting}
 \end{Shaded}
 
-The hierarchical model over the cut points has already proved useful --
-the mild computational issues that we had considered in the last model
-fit have vanished.
+The hierarchical model over the interior cut points has already proved
+useful -- the mild computational issues that we had considered in the
+last model fit have vanished.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1844,11 +1847,12 @@ Markov chain Monte Carlo estimation.
 
 Overall the retrodictive performance is a little bit better than in the
 previous model. In particular the agreements in the aggregate ratings
-histogram and stratified covariances histogram have improved slightly.
-On the other hand the retrodictive tension in the stratified variances
-stubbornly persists. We shouldn't expect too much performance, however,
-given that the hierarchical structure doesn't add any flexibility to the
-customer behaviors beyond what we had already included.
+histogram and stratified empirical covariances histogram have improved
+slightly. On the other hand the retrodictive tension in the stratified
+empirical variances stubbornly persists. We shouldn't expect too much
+performance, however, given that the hierarchical structure doesn't add
+any flexibility to the customer behaviors beyond what we had already
+included.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -1927,7 +1931,7 @@ customer behaviors beyond what we had already included.
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 234 predictive values (0.1%) fell above the binning.
+"predictive value"): 227 predictive values (0.1%) fell above the binning.
 \end{verbatim}
 
 \begin{Shaded}
@@ -1941,7 +1945,7 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 2222 predictive values (0.3%) fell above the binning.
+"predictive value"): 2264 predictive values (0.3%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-44-1.pdf}
@@ -1963,27 +1967,27 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 286 predictive values (0.0%) fell below the binning.
+"predictive value"): 355 predictive values (0.0%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 410 predictive values (0.0%) fell above the binning.
+"predictive value"): 432 predictive values (0.0%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-45-1.pdf}
 
-If we were satisfied with this retrodictive performance then there are
-already many ways that we can explore and utilize these inferences.
+Assuming that we are satisfied with this retrodictive performance there
+many ways that we can explore and utilize the associated inferences.
 
-With the new hierarchical structure we can investigate what we learned
-about not only each individual customer but also the population of
-customers. The marginal posterior distribution for \texttt{tau\_q}
-suggests a small but non-negligible heterogeneity in the cut points.
-Moreover the inferences for the baseline probabilities \texttt{mu\_q}
-suggest that customers are relatively optimistic, with four star ratings
-being more probable than tree star ratings for a neutral movie with zero
-affinity.
+For example with the new hierarchical structure we can investigate what
+we learned about not only each individual customer but also the
+population of customers. The marginal posterior distribution for
+\texttt{tau\_q} suggests a small but non-negligible heterogeneity in the
+interior cut points. Moreover the inferences for the baseline
+probabilities \texttt{mu\_q} suggest that customers are relatively
+optimistic, with four star ratings being more probable than tree star
+ratings for a neutral movie with zero affinity.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2005,19 +2009,19 @@ affinity.
 The regularizing influence of the hierarchical model is strongest for
 those customers with the fewest ratings. For example Customer 42 has
 only three observed ratings, and the hierarchical inferences for their
-cut points shift and narrow pretty substantially relative to the
-inferences from the previous model.
+interior cut points shift and narrow pretty substantially relative to
+the inferences from the previous model.
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{c }\OtherTok{\textless{}{-}} \DecValTok{42}
-\FunctionTok{table}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{customer\_idxs)[c]}
+\FunctionTok{cat}\NormalTok{(}\FunctionTok{sprintf}\NormalTok{(}\StringTok{"Customer \%s: \%s ratings"}\NormalTok{,}
+\NormalTok{            c, }\FunctionTok{table}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{customer\_idxs)[c]))}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
-42 
- 3 
+Customer 42: 3 ratings
 \end{verbatim}
 
 \begin{Shaded}
@@ -2035,7 +2039,7 @@ inferences from the previous model.
 \NormalTok{  util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples2[[name]],}
                                   \DecValTok{50}\NormalTok{, }\AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{10}\NormalTok{, }\DecValTok{5}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{1.0}\NormalTok{),}
                                   \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_light,}
-                                  \AttributeTok{display\_name=}\StringTok{\textquotesingle{}Cut Points\textquotesingle{}}\NormalTok{,}
+                                  \AttributeTok{display\_name=}\StringTok{\textquotesingle{}Interior Cut Points\textquotesingle{}}\NormalTok{,}
                                   \AttributeTok{main=}\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Customer\textquotesingle{}}\NormalTok{, c))}
 
 \NormalTok{  name }\OtherTok{\textless{}{-}} \FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}cut\_points[\textquotesingle{}}\NormalTok{, c, }\StringTok{\textquotesingle{},\textquotesingle{}}\NormalTok{, k, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
@@ -2052,12 +2056,12 @@ inferences from the previous model.
 
 \begin{verbatim}
 Warning in util$plot_expectand_pushforward(samples2[[name]], 50, flim = c(-10,
-: 3 values (0.1%) fell below the histogram binning.
+: 1 value (0.0%) fell below the histogram binning.
 \end{verbatim}
 
 \begin{verbatim}
 Warning in util$plot_expectand_pushforward(samples2[[name]], 50, flim = c(-10,
-: 0 values (0.0%) fell above the histogram binning.
+: 0 value (0.0%) fell above the histogram binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -2073,9 +2077,9 @@ Warning in util$plot_expectand_pushforward(samples3[[name]], 50, flim = c(-10,
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-48-1.pdf}
 
 We can also see the impact of the hierarchical model if we examine the
-cut point inferences for the two models across all customers. The more
-uncertain customer inferences in the previous model, especially for the
-first and last cut points, are pulled towards the other customer
+interior cut point inferences for the two models across all customers.
+The more uncertain customer inferences in the previous model, especially
+for the first and last cut points, are pulled towards the other customer
 inferences.
 
 \begin{Shaded}
@@ -2114,7 +2118,8 @@ while Customer 70 is still generous.
 \NormalTok{name }\OtherTok{\textless{}{-}}\FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}cut\_points[\textquotesingle{}}\NormalTok{, c, }\StringTok{\textquotesingle{},\textquotesingle{}}\NormalTok{, k, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples3[[name]],}
                                 \DecValTok{50}\NormalTok{, }\AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{9}\NormalTok{, }\DecValTok{9}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{2}\NormalTok{),}
-                                \AttributeTok{col=}\NormalTok{cols[k], }\AttributeTok{display\_name=}\StringTok{\textquotesingle{}Cut Points\textquotesingle{}}\NormalTok{,}
+                                \AttributeTok{col=}\NormalTok{cols[k],}
+                                \AttributeTok{display\_name=}\StringTok{\textquotesingle{}Interior Cut Points\textquotesingle{}}\NormalTok{,}
                                 \AttributeTok{main=}\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Customer\textquotesingle{}}\NormalTok{, c))}
 
 
@@ -2126,10 +2131,10 @@ while Customer 70 is still generous.
                                   \AttributeTok{add=}\ConstantTok{TRUE}\NormalTok{)}
 \NormalTok{\}}
 
-\FunctionTok{text}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{1.65}\NormalTok{, }\StringTok{"cut\_points[1]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
-\FunctionTok{text}\NormalTok{(}\DecValTok{2}\NormalTok{, }\FloatTok{1.45}\NormalTok{, }\StringTok{"cut\_points[2]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid\_highlight)}
-\FunctionTok{text}\NormalTok{(}\DecValTok{4}\NormalTok{, }\DecValTok{1}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
-\FunctionTok{text}\NormalTok{(}\DecValTok{6}\NormalTok{, }\FloatTok{0.5}\NormalTok{, }\StringTok{"cut\_points[4]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark\_highlight)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{, }\FloatTok{1.65}\NormalTok{, }\StringTok{"cut\_points[1]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
+\FunctionTok{text}\NormalTok{(}\DecValTok{2}\NormalTok{, }\FloatTok{1.55}\NormalTok{, }\StringTok{"cut\_points[2]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid\_highlight)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{4.25}\NormalTok{, }\DecValTok{1}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{6.25}\NormalTok{, }\FloatTok{0.5}\NormalTok{, }\StringTok{"cut\_points[4]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark\_highlight)}
 
 \NormalTok{c }\OtherTok{\textless{}{-}} \DecValTok{70}
 
@@ -2137,14 +2142,15 @@ while Customer 70 is still generous.
 \NormalTok{name }\OtherTok{\textless{}{-}}\FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}cut\_points[\textquotesingle{}}\NormalTok{, c, }\StringTok{\textquotesingle{},\textquotesingle{}}\NormalTok{, k, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples3[[name]],}
                                 \DecValTok{50}\NormalTok{, }\AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{9}\NormalTok{, }\DecValTok{9}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{2}\NormalTok{),}
-                                \AttributeTok{col=}\NormalTok{cols[k], }\AttributeTok{display\_name=}\StringTok{\textquotesingle{}Cut Points\textquotesingle{}}\NormalTok{,}
+                                \AttributeTok{col=}\NormalTok{cols[k],}
+                                \AttributeTok{display\_name=}\StringTok{\textquotesingle{}Interior Cut Points\textquotesingle{}}\NormalTok{,}
                                 \AttributeTok{main=}\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Customer\textquotesingle{}}\NormalTok{, c))}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in util$plot_expectand_pushforward(samples3[[name]], 50, flim = c(-9, :
-10 values (0.2%) fell below the histogram binning.
+11 values (0.3%) fell below the histogram binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -2162,10 +2168,10 @@ Warning in util$plot_expectand_pushforward(samples3[[name]], 50, flim = c(-9, :
                                   \AttributeTok{add=}\ConstantTok{TRUE}\NormalTok{)}
 \NormalTok{\}}
 
-\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{5.5}\NormalTok{, }\FloatTok{0.4}\NormalTok{, }\StringTok{"cut\_points[1]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
-\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{3}\NormalTok{, }\FloatTok{0.85}\NormalTok{, }\StringTok{"cut\_points[2]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid\_highlight)}
-\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{2}\NormalTok{, }\FloatTok{1.15}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
-\FunctionTok{text}\NormalTok{(}\FloatTok{1.0}\NormalTok{, }\FloatTok{1.35}\NormalTok{, }\StringTok{"cut\_points[4]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark\_highlight)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{5.75}\NormalTok{, }\FloatTok{0.4}\NormalTok{, }\StringTok{"cut\_points[1]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{3}\NormalTok{, }\FloatTok{0.9}\NormalTok{, }\StringTok{"cut\_points[2]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid\_highlight)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{2}\NormalTok{, }\FloatTok{1.2}\NormalTok{, }\StringTok{"cut\_points[3]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{1.0}\NormalTok{, }\FloatTok{1.4}\NormalTok{, }\StringTok{"cut\_points[4]"}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark\_highlight)}
 \end{Highlighting}
 \end{Shaded}
 
@@ -2173,8 +2179,8 @@ Warning in util$plot_expectand_pushforward(samples3[[name]], 50, flim = c(-9, :
 
 Of course we can still investigate the behavior of individual movies and
 the hierarchical population of movies. The hierarchical regularization
-of the cut points allows the observed ratings to slightly better inform
-the movie affinities.
+of the interior cut points allows the observed ratings to slightly
+better inform the movie affinities.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2213,7 +2219,8 @@ fast to compute.
 \end{Highlighting}
 \end{Shaded}
 
-We can then use this ranking to select out the five worst movies.
+We can then use this ranking to select the five worst movies for this
+particular set of customers.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2232,8 +2239,8 @@ We can then use this ranking to select out the five worst movies.
   196   175
 \end{verbatim}
 
-To be a bit less pessimistic we could also consider the five best
-movies.
+To be a bit less pessimistic we could also consider the five best movies
+for this particular set of customers.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2252,8 +2259,8 @@ movies.
     1   180
 \end{verbatim}
 
-We have a variety of ways to make inferential comparisons between two
-movies at a time. For example we could just overlay the marginal
+We also have a variety of ways to make inferential comparisons between
+two movies at a time. For example we could just overlay the marginal
 posterior distributions for each movie affinity.
 
 \begin{Shaded}
@@ -2264,10 +2271,10 @@ posterior distributions for each movie affinity.
 \NormalTok{name }\OtherTok{\textless{}{-}}\FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}gamma[\textquotesingle{}}\NormalTok{, m1, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples3[[name]],}
                                 \DecValTok{50}\NormalTok{, }\AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\DecValTok{3}\NormalTok{, }\DecValTok{3}\NormalTok{),}
-                                \AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{1.3}\NormalTok{),}
+                                \AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{1.35}\NormalTok{),}
                                 \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid,}
                                 \AttributeTok{display\_name=}\StringTok{\textquotesingle{}Affinity\textquotesingle{}}\NormalTok{)}
-\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{1.25}\NormalTok{, }\FloatTok{1.2}\NormalTok{, }\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Movie\textquotesingle{}}\NormalTok{, m1), }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
+\FunctionTok{text}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{1.25}\NormalTok{, }\FloatTok{1.3}\NormalTok{, }\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Movie\textquotesingle{}}\NormalTok{, m1), }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
 
 \NormalTok{m2 }\OtherTok{\textless{}{-}} \FunctionTok{tail}\NormalTok{(post\_mean\_ordering, }\DecValTok{1}\NormalTok{)}
 \NormalTok{name }\OtherTok{\textless{}{-}}\FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}gamma[\textquotesingle{}}\NormalTok{, m2, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
@@ -2276,7 +2283,7 @@ posterior distributions for each movie affinity.
                                 \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark,}
                                 \AttributeTok{border=}\StringTok{"\#BBBBBB88"}\NormalTok{,}
                                 \AttributeTok{add=}\ConstantTok{TRUE}\NormalTok{)}
-\FunctionTok{text}\NormalTok{(}\FloatTok{1.25}\NormalTok{, }\FloatTok{1.2}\NormalTok{, }\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Movie\textquotesingle{}}\NormalTok{, m2), }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{1.25}\NormalTok{, }\FloatTok{1.3}\NormalTok{, }\FunctionTok{paste}\NormalTok{(}\StringTok{\textquotesingle{}Movie\textquotesingle{}}\NormalTok{, m2), }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
 \end{Highlighting}
 \end{Shaded}
 
@@ -2310,20 +2317,18 @@ Posterior probability that movie 31 affinity > movie 180 affinity = 1.000 +/- 0.
 \section{Hierarchical Customer Model With Heterogeneous
 Affinities}\label{hierarchical-customer-model-with-heterogeneous-affinities}
 
-At this point there are two main limitations with the last model.
-Firstly there is the mild retrodictive tension in a few of the summary
-statistics. Secondly it makes the strong assumption that once the
-different interpretations of ratings are taken into account all
-customers have the same opinions about each movie.
+There are two main limitations with the last model. Firstly there is the
+mild retrodictive tension in a few of the summary statistics. Secondly
+it makes the strong assumption that once the different interpretations
+of ratings are taken into account all customers have the same opinion
+about each movie. This for example prevents us from making personalized
+recommendations to each customer.
 
-This for example prevents us from making personalized recommendations to
-each customer. Incorporating individual tastes into the model would
-inform much more nuanced inferences and predictions. It could even
-resolve some of the retrodictive tension.
-
-The immediate challenge with trying to infer personal movie preferences,
-however, is that customers rate only a very small proportion of the
-available movies.
+Incorporating individual tastes into the model would inform much more
+nuanced inferences and predictions. It could even resolve some of the
+retrodictive tension. The immediate challenge with trying to infer
+personal movie preferences, however, is that customers rate only a very
+small proportion of the available movies.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2345,9 +2350,9 @@ available movies.
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-57-1.pdf}
 
 In the machine learning literature the problem of filling in unobserved
-pairs, like customer-movie ratings in this application, is often known
-as ``matrix completion'' in analogy to filling in the missing cells of
-this visualization.
+comparisons, like customer-movie ratings in this application, is often
+known as ``matrix completion'' in analogy to filling in the missing
+cells in this pairwise comparison matrix.
 
 Because most of the ratings are unobserved the only way to inform
 individual customer preferences for each movie is to pool correlations
@@ -2371,15 +2376,16 @@ p(\boldsymbol{\delta}_{c})
 \] Whatever we learn about the population baseline
 \(\boldsymbol{\gamma}_{0}\), the population scales
 \(\boldsymbol{\tau}_{\gamma}\), and the population correlations
-\(\boldsymbol{\Phi}_{\gamma}\) fill in whatever elements of any affinity
-vector \(\boldsymbol{\gamma}_{c}\) that might be unobserved.
+\(\boldsymbol{\Phi}_{\gamma}\) fill in whatever elements of any
+particular customer affinity vector \(\boldsymbol{\gamma}_{c}\) that
+might be unobserved.
 
-Because the movies are still exchangeable we can model the baseline
-movie affinities hierarchically as well, \[
+Because our domain expertise about the movies is still exchangeable we
+can model the baseline movie affinities hierarchically as well, \[
 p( \gamma_{0, m} ) = \text{normal}(0, \tau_{\gamma_{0}} ).
-\] We're now modeling the cut points, the baseline movie affinities,
-\emph{and} the individual customer affinities hierarchically all at the
-same time. Pretty neat.
+\] We're now modeling the interior cut points, the baseline movie
+affinities, \emph{and} the individual customer affinities hierarchically
+all at the same time. Pretty neat.
 
 Given the sparsity of observed ratings we'll implement the normal and
 multivariate normal hierarchical models with non-centered
@@ -2392,33 +2398,27 @@ parameterizations.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{functions}\NormalTok{ \{}
-  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha, }\DataTypeTok{real}\NormalTok{ phi) \{}
+  \CommentTok{// Log probability density function over cut point}
+  \CommentTok{// induced by a Dirichlet probability density function}
+  \CommentTok{// over baseline probabilities and latent logistic}
+  \CommentTok{// density function.}
+  \DataTypeTok{real}\NormalTok{ induced\_dirichlet\_lpdf(}\DataTypeTok{vector}\NormalTok{ c, }\DataTypeTok{vector}\NormalTok{ alpha) \{}
     \DataTypeTok{int}\NormalTok{ K = num\_elements(c) + }\DecValTok{1}\NormalTok{;}
-    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] sigma = inv\_logit(phi {-} c);}
-    \DataTypeTok{vector}\NormalTok{[K] p;}
-    \DataTypeTok{matrix}\NormalTok{[K, K] J = rep\_matrix(}\DecValTok{0}\NormalTok{, K, K);}
-    
-    \CommentTok{// Induced ordinal probabilities}
-\NormalTok{    p[}\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{ {-} sigma[}\DecValTok{1}\NormalTok{];}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{))}
-\NormalTok{      p[k] = sigma[k {-} }\DecValTok{1}\NormalTok{] {-} sigma[k];}
-\NormalTok{    p[K] = sigma[K {-} }\DecValTok{1}\NormalTok{];}
-    
-    \CommentTok{// Baseline column of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:K) J[k, }\DecValTok{1}\NormalTok{] = }\DecValTok{1}\NormalTok{;}
-    
-    \CommentTok{// Diagonal entries of Jacobian}
-    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{2}\NormalTok{:K) \{}
-      \DataTypeTok{real}\NormalTok{ rho = sigma[k {-} }\DecValTok{1}\NormalTok{] * (}\DecValTok{1}\NormalTok{ {-} sigma[k {-} }\DecValTok{1}\NormalTok{]);}
-\NormalTok{      J[k,     k] = {-} rho;}
-\NormalTok{      J[k {-} }\DecValTok{1}\NormalTok{, k] = + rho;}
+    \DataTypeTok{vector}\NormalTok{[K {-} }\DecValTok{1}\NormalTok{] Pi = inv\_logit(c);}
+    \DataTypeTok{vector}\NormalTok{[K] p = append\_row(Pi, [}\DecValTok{1}\NormalTok{]\textquotesingle{}) {-} append\_row([}\DecValTok{0}\NormalTok{]\textquotesingle{}, Pi);}
+
+    \CommentTok{// Log Jacobian correction}
+    \DataTypeTok{real}\NormalTok{ logJ = }\DecValTok{0}\NormalTok{;}
+    \ControlFlowTok{for}\NormalTok{ (k }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:(K {-} }\DecValTok{1}\NormalTok{)) \{}
+      \ControlFlowTok{if}\NormalTok{ (c[k] \textgreater{}= }\DecValTok{0}\NormalTok{)}
+\NormalTok{        logJ += {-}c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp({-}c[k]));}
+      \ControlFlowTok{else}
+\NormalTok{        logJ += +c[k] {-} }\DecValTok{2}\NormalTok{ * log(}\DecValTok{1}\NormalTok{ + exp(+c[k]));}
 \NormalTok{    \}}
-    
-    \ControlFlowTok{return}\NormalTok{   dirichlet\_lpdf(p | alpha)}
-\NormalTok{           + log\_determinant(J);}
+
+    \ControlFlowTok{return}\NormalTok{ dirichlet\_lpdf(p | alpha) + logJ;}
 \NormalTok{  \}}
 \NormalTok{\}}
-
 \KeywordTok{data}\NormalTok{ \{}
   \DataTypeTok{int}\NormalTok{\textless{}}\KeywordTok{lower}\NormalTok{=}\DecValTok{1}\NormalTok{\textgreater{} N\_ratings;}
   \DataTypeTok{array}\NormalTok{[N\_ratings] }\DataTypeTok{int}\NormalTok{\textless{}}\KeywordTok{lower}\NormalTok{=}\DecValTok{1}\NormalTok{, }\KeywordTok{upper}\NormalTok{=}\DecValTok{5}\NormalTok{\textgreater{} ratings;}
@@ -2451,13 +2451,10 @@ parameterizations.
   \DataTypeTok{vector}\NormalTok{[N\_movies] gamma0 = tau\_gamma0 * gamma0\_ncp;}
 
   \CommentTok{// Centered customer movie affinities}
-  \DataTypeTok{matrix}\NormalTok{[N\_movies, N\_movies] Phi;}
   \DataTypeTok{array}\NormalTok{[N\_customers] }\DataTypeTok{vector}\NormalTok{[N\_movies] delta\_gamma;}
 \NormalTok{  \{}
     \DataTypeTok{matrix}\NormalTok{[N\_movies, N\_movies] L\_cov}
 \NormalTok{      = diag\_pre\_multiply(tau\_delta\_gamma, L\_delta\_gamma);}
-
-\NormalTok{    Phi = L\_cov * L\_cov\textquotesingle{};}
     \ControlFlowTok{for}\NormalTok{ (c }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_customers)}
 \NormalTok{      delta\_gamma[c] = L\_cov * delta\_gamma\_ncp[c];}
 \NormalTok{  \}}
@@ -2477,7 +2474,7 @@ parameterizations.
 \NormalTok{  L\_delta\_gamma \textasciitilde{} lkj\_corr\_cholesky(}\FloatTok{5.0}\NormalTok{ * sqrt(N\_movies));}
 
   \ControlFlowTok{for}\NormalTok{ (c }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_customers)}
-\NormalTok{    cut\_points[c] \textasciitilde{} induced\_dirichlet(alpha, }\DecValTok{0}\NormalTok{);}
+\NormalTok{    cut\_points[c] \textasciitilde{} induced\_dirichlet(alpha);}
 \NormalTok{  mu\_q \textasciitilde{} dirichlet(}\DecValTok{5}\NormalTok{ * ones);}
 \NormalTok{  tau\_q \textasciitilde{} normal(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{);}
 
@@ -2491,6 +2488,8 @@ parameterizations.
 \NormalTok{\}}
 
 \KeywordTok{generated quantities}\NormalTok{ \{}
+  \DataTypeTok{matrix}\NormalTok{[N\_movies, N\_movies] Phi;}
+
   \DataTypeTok{array}\NormalTok{[N\_ratings] }\DataTypeTok{int}\NormalTok{\textless{}}\KeywordTok{lower}\NormalTok{=}\DecValTok{1}\NormalTok{, }\KeywordTok{upper}\NormalTok{=}\DecValTok{5}\NormalTok{\textgreater{} rating\_pred;}
 
   \DataTypeTok{array}\NormalTok{[N\_customers] }\DataTypeTok{real}\NormalTok{ mean\_rating\_customer\_pred}
@@ -2502,6 +2501,12 @@ parameterizations.
   \DataTypeTok{array}\NormalTok{[N\_movies] }\DataTypeTok{real}\NormalTok{ var\_rating\_movie\_pred = rep\_array(}\DecValTok{0}\NormalTok{, N\_movies);}
 
   \DataTypeTok{matrix}\NormalTok{[N\_movies, N\_movies] covar\_rating\_movie\_pred;}
+
+\NormalTok{  \{}
+    \DataTypeTok{matrix}\NormalTok{[N\_movies, N\_movies] L\_cov}
+\NormalTok{      = diag\_pre\_multiply(tau\_delta\_gamma, L\_delta\_gamma);}
+\NormalTok{    Phi = L\_cov * L\_cov\textquotesingle{};}
+\NormalTok{  \}}
 
 \NormalTok{  \{}
     \DataTypeTok{array}\NormalTok{[N\_customers] }\DataTypeTok{real}\NormalTok{ C = rep\_array(}\DecValTok{0}\NormalTok{, N\_customers);}
@@ -2589,9 +2594,10 @@ parameterizations.
 \end{Highlighting}
 \end{Shaded}
 
-People complain about the annoyance of diagnostic warnings but how bad
-can they be if we don't see any for this complex model with 40,706
-degrees of freedom? Turns out Hamiltonian Monte Carlo is pretty good!
+People complain about frustration with diagnostic warnings, but how bad
+can they be if we don't see serious warnings for this complex model with
+40,706 degrees of freedom? Turns out Hamiltonian Monte Carlo is pretty
+good!
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2623,14 +2629,18 @@ Markov chain Monte Carlo.
 \end{Shaded}
 
 \begin{verbatim}
-All expectands checked appear to be behaving well enough for reliable
-Markov chain Monte Carlo estimation.
+tau_delta_gamma[97]:
+  Chain 1: hat{ESS} (39.565) is smaller than desired (100).
+
+
+Small empirical effective sample sizes result in imprecise Markov chain
+Monte Carlo estimators.
 \end{verbatim}
 
 Unfortunately all of this added sophisticated doesn't actually seem to
 improve the retrodictive performance much. Even the retrodictive tension
-in the covariances, which should be particularly sensitive to added
-flexibility in the new model, is similar to what we saw with the
+in the empirical covariances, which should be particularly sensitive to
+added flexibility in the new model, is similar to what we saw with the
 previous model. One possibility is that the multivariate normal
 population model is isn't sufficiently heavy-tailed to accommodate the
 more extreme tastes of the customers.
@@ -2712,7 +2722,7 @@ more extreme tastes of the customers.
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 283 predictive values (0.1%) fell above the binning.
+"predictive value"): 307 predictive values (0.1%) fell above the binning.
 \end{verbatim}
 
 \begin{Shaded}
@@ -2726,7 +2736,7 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 2337 predictive values (0.3%) fell above the binning.
+"predictive value"): 2321 predictive values (0.3%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-63-1.pdf}
@@ -2748,12 +2758,12 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 124 predictive values (0.0%) fell below the binning.
+"predictive value"): 113 predictive values (0.0%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 90 predictive values (0.0%) fell above the binning.
+"predictive value"): 95 predictive values (0.0%) fell above the binning.
 \end{verbatim}
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-64-1.pdf}
@@ -2761,11 +2771,11 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 The lack of any substantial improvements in the retrodictive performance
 suggests that we might not have included enough data to really resolve
 individual customer preferences quite yet. We can directly quantify how
-much we can resolve individual customer preferences by examining our
+well we can resolve individual customer preferences by examining our
 posterior inferences.
 
-Posterior inferences for the cut point population behaviors are mostly
-consistent with the previous model, although the baseline rating
+Posterior inferences for the interior cut point population behaviors are
+mostly consistent with the previous model, although the baseline rating
 probabilities do slightly shift down to be more centered around 3. This
 suggest that the previous model may have been contorting itself a bit to
 account for the variation in customer tastes.
@@ -2811,9 +2821,9 @@ account for the variation in customer tastes.
 
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-66-1.pdf}
 
-Similarly some of the individual customer cut points change slightly.
-For example the cut points for Customer 23 shift a bit towards larger
-values.
+Similarly some of the individual customer interior cut points change
+slightly. For example the cut points for Customer 23 shift a bit towards
+larger values.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2821,7 +2831,7 @@ values.
 
 \NormalTok{c }\OtherTok{\textless{}{-}} \DecValTok{23}
 
-\NormalTok{lab3\_xs }\OtherTok{\textless{}{-}} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{)}
+\NormalTok{lab3\_xs }\OtherTok{\textless{}{-}} \FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{)}
 \NormalTok{lab3\_ys }\OtherTok{\textless{}{-}} \FunctionTok{c}\NormalTok{(}\FloatTok{1.75}\NormalTok{, }\FloatTok{0.5}\NormalTok{, }\FloatTok{0.5}\NormalTok{, }\FloatTok{0.25}\NormalTok{)}
 
 \NormalTok{lab4\_xs }\OtherTok{\textless{}{-}} \FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{, }\FloatTok{5.5}\NormalTok{, }\DecValTok{8}\NormalTok{)}
@@ -2848,7 +2858,7 @@ values.
 \includegraphics{ratings_files/figure-pdf/unnamed-chunk-67-1.pdf}
 
 The baseline movie affinities emulate the universal movie preferences in
-the previous model, and indeed inferences for them are similar if
+the previous model and indeed inferences for them are similar, if
 slightly more heterogeneous.
 
 \begin{Shaded}
@@ -2906,8 +2916,8 @@ Overall there is a lot of uncertainty, with the inferences for most of
 the movie affinity scales concentrating around zero. That said a few
 stand out. For example the posterior inferences for
 \(\tau_{\gamma, 159}\) are starting to pull away from zero, suggesting
-that customers tend to disagree with the quality of this movie more than
-usual.
+that customers tend to disagree about the quality of this movie more
+than usual.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2926,35 +2936,78 @@ usual.
 The inferred correlations in the multivariate normal population model
 allow us to inform predictions for how a customer would react to unrated
 movies given the movies they have rated. While most of the correlations
-are consistent with zero many are large enough to be resolved even from
-this limited data set.
+are consistent with zero, here approximated by how much of their
+marginal posterior probability concentrates on values below 0.05, a few
+are consistent with larger values.
+
+Note that I've had to break out some custom, heavily-optimized code here
+to calculate the 19,900 posterior probabilities reasonably efficiently.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{mar=}\FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{5}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{))}
+\NormalTok{apply\_pushforward\_expectation }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(expectand\_vals\_list,}
+\NormalTok{                                          pushforward\_expectand,}
+\NormalTok{                                          input\_names) \{}
+\NormalTok{  arg\_name }\OtherTok{\textless{}{-}} \FunctionTok{formalArgs}\NormalTok{(pushforward\_expectand)}
 
-\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(samples4, }\StringTok{\textquotesingle{}Phi\textquotesingle{}}\NormalTok{, }\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{, }\FloatTok{0.01}\NormalTok{,}
-                         \AttributeTok{xlab=}\StringTok{"Movie{-}wise Affinity Correlations"}\NormalTok{)}
+\NormalTok{  C }\OtherTok{\textless{}{-}} \FunctionTok{dim}\NormalTok{(expectand\_vals\_list[[}\DecValTok{1}\NormalTok{]])[}\DecValTok{1}\NormalTok{]}
+\NormalTok{  S }\OtherTok{\textless{}{-}} \FunctionTok{dim}\NormalTok{(expectand\_vals\_list[[}\DecValTok{1}\NormalTok{]])[}\DecValTok{2}\NormalTok{]}
+
+\NormalTok{  expectand\_vals\_env }\OtherTok{\textless{}{-}} \FunctionTok{as.environment}\NormalTok{(expectand\_vals\_list)}
+\NormalTok{  access\_val }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(name) \{}
+\NormalTok{    expectand\_vals\_env[[name]][c, s]}
+\NormalTok{  \}}
+
+\NormalTok{  I }\OtherTok{\textless{}{-}} \FunctionTok{length}\NormalTok{(input\_names)}
+\NormalTok{  psh\_fwd\_exp\_vals }\OtherTok{\textless{}{-}} \FunctionTok{as.list}\NormalTok{(}\FunctionTok{rep}\NormalTok{(}\ConstantTok{NA}\NormalTok{, I))}
+\NormalTok{  pushforward\_vals }\OtherTok{\textless{}{-}} \FunctionTok{matrix}\NormalTok{(}\ConstantTok{NA}\NormalTok{, }\AttributeTok{nrow=}\NormalTok{C, }\AttributeTok{ncol=}\NormalTok{S)}
+
+  \ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \DecValTok{1}\SpecialCharTok{:}\NormalTok{I) \{}
+    \ControlFlowTok{for}\NormalTok{ (c }\ControlFlowTok{in} \DecValTok{1}\SpecialCharTok{:}\NormalTok{C) \{}
+      \ControlFlowTok{for}\NormalTok{ (s }\ControlFlowTok{in} \DecValTok{1}\SpecialCharTok{:}\NormalTok{S) \{}
+\NormalTok{        pushforward\_vals[c, s] }\OtherTok{\textless{}{-}}
+          \FunctionTok{as.numeric}\NormalTok{(}\FunctionTok{do.call}\NormalTok{(pushforward\_expectand,}
+                             \FunctionTok{setNames}\NormalTok{(}\FunctionTok{list}\NormalTok{(}\FunctionTok{access\_val}\NormalTok{(input\_names[[i]])),}
+\NormalTok{                                      arg\_name)))}
+\NormalTok{      \}}
+\NormalTok{    \}}
+\NormalTok{    psh\_fwd\_exp\_vals[[i]] }\OtherTok{\textless{}{-}}\NormalTok{ util}\SpecialCharTok{$}\FunctionTok{ensemble\_mcmc\_est}\NormalTok{(pushforward\_vals)[}\DecValTok{1}\NormalTok{]}
+\NormalTok{  \}}
+  \FunctionTok{return}\NormalTok{(}\FunctionTok{as.numeric}\NormalTok{(psh\_fwd\_exp\_vals))}
+\NormalTok{\}}
 \end{Highlighting}
 \end{Shaded}
 
-\begin{verbatim}
-Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 136930 predictive values (0.1%) fell below the binning.
-\end{verbatim}
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{M }\OtherTok{\textless{}{-}}\NormalTok{ data}\SpecialCharTok{$}\NormalTok{N\_movies }\SpecialCharTok{*}\NormalTok{ (data}\SpecialCharTok{$}\NormalTok{N\_movies }\SpecialCharTok{{-}} \DecValTok{1}\NormalTok{) }\SpecialCharTok{/} \DecValTok{2}
+\NormalTok{input\_names }\OtherTok{\textless{}{-}} \FunctionTok{as.list}\NormalTok{(}\FunctionTok{rep}\NormalTok{(}\ConstantTok{NA}\NormalTok{, M))}
 
-\begin{verbatim}
-Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 543674 predictive values (0.3%) fell above the binning.
-\end{verbatim}
+\NormalTok{idx }\OtherTok{\textless{}{-}} \DecValTok{1}
+\ControlFlowTok{for}\NormalTok{ (m1 }\ControlFlowTok{in} \DecValTok{2}\SpecialCharTok{:}\NormalTok{data}\SpecialCharTok{$}\NormalTok{N\_movies) \{}
+  \ControlFlowTok{for}\NormalTok{ (m2 }\ControlFlowTok{in} \DecValTok{1}\SpecialCharTok{:}\NormalTok{(m1 }\SpecialCharTok{{-}} \DecValTok{1}\NormalTok{)) \{}
+\NormalTok{    input\_names[[idx]] }\OtherTok{\textless{}{-}} \FunctionTok{paste0}\NormalTok{(}\StringTok{\textquotesingle{}Phi[\textquotesingle{}}\NormalTok{, m1, }\StringTok{\textquotesingle{},\textquotesingle{}}\NormalTok{, m2, }\StringTok{\textquotesingle{}]\textquotesingle{}}\NormalTok{)}
+\NormalTok{    idx }\OtherTok{\textless{}{-}}\NormalTok{ idx }\SpecialCharTok{+} \DecValTok{1}
+\NormalTok{  \}}
+\NormalTok{\}}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-71-1.pdf}
+\NormalTok{corr\_probs }\OtherTok{\textless{}{-}} \FunctionTok{apply\_pushforward\_expectation}\NormalTok{(samples4,}
+                                            \ControlFlowTok{function}\NormalTok{(phi) phi }\SpecialCharTok{\textless{}} \FloatTok{0.05}\NormalTok{,}
+\NormalTok{                                            input\_names)}
 
-It's more practical, not to mention more interpretable, to investigate
-the consequence of these correlations. In particular we can look at the
-movie affinities for each customer by adding together the common
-baselines with their individual preferences. Here we'll consider
-Customer 23.
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{mar=}\FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{5}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{))}
+
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_line\_hist}\NormalTok{(corr\_probs, }\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{, }\FloatTok{0.01}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark,}
+                    \AttributeTok{xlab=}\StringTok{"Posterior Probability Phi[m1,m2] \textless{} 0.05"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-72-1.pdf}
+
+That said it's more practical to investigate the consequence of these
+correlations. In particular we can look at the movie affinities for each
+customer by adding together the common baselines with their individual
+preferences. Here we'll consider Customer 23.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -2978,7 +3031,7 @@ Customer 23.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-72-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-73-1.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -3019,7 +3072,7 @@ Customer 23.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-74-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-75-1.pdf}
 
 Even better we can separately visualize the movie affinities that are
 directly informed by observed ratings and those informed by only the
@@ -3056,7 +3109,7 @@ but also much more uniform.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-75-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-76-1.pdf}
 
 The immediate benefit of modeling individual preferences is that we can
 now make movie recommendations bespoke to Customer 23.
@@ -3089,7 +3142,7 @@ now make movie recommendations bespoke to Customer 23.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-77-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-78-1.pdf}
 
 From this we can infer what movies we think Customer 23 will like the
 least.
@@ -3108,7 +3161,7 @@ least.
   199    13
   198    78
   197    55
-  196   183
+  196   119
 \end{verbatim}
 
 As well as what movies we think they will like the most.
@@ -3134,7 +3187,7 @@ Of course there's not much utility in recommending a customer a movie
 that they've already seen. A much more useful recommendation is for
 movies that they haven't yet seen but might enjoy.
 
-Here let's assume that a movie has been unrated by a customer only if it
+Here let's assume that a movie has been unrated by a customer only if
 the customer has not yet seen it. Consequently the recommendation task
 comes down to inferring the unrated movies with the highest affinities
 for Customer 23.
@@ -3148,8 +3201,8 @@ for Customer 23.
 \end{Highlighting}
 \end{Shaded}
 
-We can finally present a list of the top movies to recommend to Customer
-23.
+We can finally present a list of the top new movies to recommend to
+Customer 23.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -3161,14 +3214,14 @@ We can finally present a list of the top movies to recommend to Customer
 
 \begin{verbatim}
  Rank Movie
-   10    95
+   10    72
     9   186
-    8   155
-    7    15
-    6   107
+    8    15
+    7   155
+    6    86
     5   161
-    4    43
-    3    86
+    4   107
+    3    43
     2    87
     1   193
 \end{verbatim}
@@ -3190,18 +3243,18 @@ recommendations given the large uncertainties.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-82-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-83-1.pdf}
 
 One subtlety with recommendations is that in most applications we cannot
 evaluate their performance directly. For example absent any additional
-interrogation of the Customer 23 the only indication of how much they
-agree with one our recommendations is how well they rate the movie in
-the future.
+interrogation of Customer 23 the only indication of how much they agree
+with one our recommendations is how well they rate the movie in the
+future.
 
-Fortunately we can use our inferences to predict not only the latent
-affinity of these movie recommendations but also how we think Customer
-23 would rate them. This would allow us to compare predicted rankings to
-actual rankings.
+Fortunately we can use our inferences to predict not only movie
+recommendations but also how we think Customer 23 would rate them. This
+would allow us to for example compare predicted rankings to actual
+rankings.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -3252,11 +3305,11 @@ actual rankings.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-84-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-85-1.pdf}
 
-Interestingly we don't actually predict a high rating for our top
-recommendation. In hindsight, however, this shouldn't be unexpected
-given how austere Customer 23 is with their stars.
+Interestingly we don't actually predict a particularly high rating for
+our top recommendation. In hindsight, however, this shouldn't be
+unexpected given how austere Customer 23 is with their stars.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -3268,15 +3321,15 @@ given how austere Customer 23 is with their stars.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-85-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-86-1.pdf}
 
 Another benefit of this hierarchical approach is that we are not limited
 to making inferences and predictions for existing customers. In
 particular we can also make inferences and predictions for new customers
-by sampling new cut points and movie affinities from the respective
-hierarchical population models. With the dearth of observed ratings
-these predictions will be highly uncertain, but at the same time that
-uncertainty prevents us from making overly confident claims.
+by sampling new interior cut points and movie affinities from the
+respective hierarchical population models. With the dearth of observed
+ratings these predictions won't be all that precise, but at the same
+time that uncertainty prevents us from making overly confident claims.
 
 \section{Computational
 Considerations}\label{computational-considerations}
@@ -3284,9 +3337,9 @@ Considerations}\label{computational-considerations}
 I want to emphasize that this case study is first and foremost a
 demonstrative analysis. In particular I reduced the data not for any
 statistical reason by rather to ensure that the models would not take
-too long to run as I developed the analysis. Ultimately the final model
-took about three hours to run on my laptop which wasn't too onerous,
-especially given the total number of parameters.
+too long to run. Ultimately the final model took about three hours to
+run on my laptop which wasn't too onerous, especially given the total
+number of parameters.
 
 That said I do think it is useful to at least consider what the
 different priorities might be for a more realistic analysis where a
@@ -3304,15 +3357,16 @@ to explore it. For a fixed data set the two main ways that we can reduce
 computation is to improve the posterior geometry or speed up the model
 evaluations.
 
-Whenever working with hierarchical models we need to be considerate of
-the potentially problematic geometries to which they are prone. In this
-case study we seemed to do okay with a monolithic non-centered
+When working with hierarchical models we need to be considerate of the
+potentially problematic geometries to which they are prone. In this case
+study we seemed to do okay with a monolithic non-centered
 parameterization for the normal and multivariate normal hierarchies, but
 we could possibly improve the geometry by non-centering the parameters
-corresponding to more prolific movies and customers. Before doing that,
-however, we can estimate the potential for improvement by examining the
-length of the numerical Hamiltonian trajectories, and hence how many
-model evaluations were needed per iteration, in our last fit.
+corresponding to more prolific movies and customers. Before considering
+that, however, we can estimate the potential for improvement by
+examining the length of the numerical Hamiltonian trajectories, and
+hence how many model evaluations were needed per iteration, in our last
+fit.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -3320,7 +3374,7 @@ model evaluations were needed per iteration, in our last fit.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{ratings_files/figure-pdf/unnamed-chunk-86-1.pdf}
+\includegraphics{ratings_files/figure-pdf/unnamed-chunk-87-1.pdf}
 
 Despite the complexity of the final model the numerical Hamiltonian
 trajectories weren't all that long. Even in an ideal case we can't do do
@@ -3354,11 +3408,11 @@ the posterior geometry doesn't get any worst that pushes three hours to
 over a full day of computation.
 
 In practice we can fight quadratic scaling only so far. Ultimately the
-problem is that the final model has to compare every movie to every
-other movie. Consequently the most effective scaling strategy is to
-limit the number of movies to which each movie is compared. More
-formally we need to introduce an appropriate sparsity structure on the
-movies so that most of the \(N_{\text{movie}}^{2}\) covariances are
+problem is that the final model always has to compare every movie to
+every other movie. Consequently the most effective scaling strategy is
+often to limit the number of movies to which each movie is compared.
+More formally we need to introduce an appropriate sparsity structure on
+the movies so that most of the \(N_{\text{movie}}^{2}\) covariances are
 zero.
 
 Many methods attempt to learn a sparsity structure consistent with the
@@ -3379,8 +3433,7 @@ unrated movies.
 Given the sparsity of the observed ratings we can learn only so much.
 Consequently we might as well build a more restricted model of
 meaningful behaviors that we have a hope of resolving than attempting to
-learn intricate details about which we just don't have enough
-information.
+learn details about which we just don't have enough information.
 
 \section{Conclusion}\label{conclusion}
 
@@ -3389,12 +3442,13 @@ consumer feedback that accounts for not only how each customer
 interprets the possible ordinal ratings in different ways but also the
 variation in their preferences. To learn anything about these behaviors
 in spite of the sparsity of the data we had to leverage our domain
-expertise and some intricate modeling techniques.
+expertise and some formidable modeling techniques.
 
 If anything I hope that this case study demonstrates how powerful
-hierarchical modeling techniques can be when used carefully. We used our
-domain expertise to sketch out the data generating process first, and
-only then considered opportunities for heterogeneous behaviors.
+hierarchical modeling techniques can be when used carefully. In
+particular to achieve our final inferences we used our domain expertise
+to sketch out the data generating process first, and only then
+considered opportunities for heterogeneous behaviors.
 
 By starting with the broad features of the data generating process we
 established an explicit context that made is easier to identify not only
@@ -3409,6 +3463,8 @@ population models!
 
 \section*{Acknowledgements}\label{acknowledgements}
 \addcontentsline{toc}{section}{Acknowledgements}
+
+I thank jd for helpful comments.
 
 A very special thanks to everyone supporting me on Patreon: Adam
 Fleischhacker, Adriano Yoshino, Alejandro Navarro-Martínez, Alessandro

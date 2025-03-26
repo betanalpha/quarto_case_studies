@@ -1,31 +1,25 @@
 functions {
-  real induced_dirichlet_lpdf(vector c, vector alpha, real phi) {
+  // Log probability density function over cut point
+  // induced by a Dirichlet probability density function
+  // over baseline probabilities and latent logistic
+  // density function.
+  real induced_dirichlet_lpdf(vector c, vector alpha) {
     int K = num_elements(c) + 1;
-    vector[K - 1] sigma = inv_logit(phi - c);
-    vector[K] p;
-    matrix[K, K] J = rep_matrix(0, K, K);
-    
-    // Induced ordinal probabilities
-    p[1] = 1 - sigma[1];
-    for (k in 2:(K - 1))
-      p[k] = sigma[k - 1] - sigma[k];
-    p[K] = sigma[K - 1];
-    
-    // Baseline column of Jacobian
-    for (k in 1:K) J[k, 1] = 1;
-    
-    // Diagonal entries of Jacobian
-    for (k in 2:K) {
-      real rho = sigma[k - 1] * (1 - sigma[k - 1]);
-      J[k,     k] = - rho;
-      J[k - 1, k] = + rho;
+    vector[K - 1] Pi = inv_logit(c);
+    vector[K] p = append_row(Pi, [1]') - append_row([0]', Pi);
+
+    // Log Jacobian correction
+    real logJ = 0;
+    for (k in 1:(K - 1)) {
+      if (c[k] >= 0)
+        logJ += -c[k] - 2 * log(1 + exp(-c[k]));
+      else
+        logJ += +c[k] - 2 * log(1 + exp(+c[k]));
     }
-    
-    return   dirichlet_lpdf(p | alpha)
-           + log_determinant(J);
+
+    return dirichlet_lpdf(p | alpha) + logJ;
   }
 }
-
 data {
   int<lower=1> N_ratings;
   array[N_ratings] int<lower=1, upper=5> ratings;
@@ -58,13 +52,10 @@ transformed parameters {
   vector[N_movies] gamma0 = tau_gamma0 * gamma0_ncp;
 
   // Centered customer movie affinities
-  matrix[N_movies, N_movies] Phi;
   array[N_customers] vector[N_movies] delta_gamma;
   {
     matrix[N_movies, N_movies] L_cov
       = diag_pre_multiply(tau_delta_gamma, L_delta_gamma);
-
-    Phi = L_cov * L_cov';
     for (c in 1:N_customers)
       delta_gamma[c] = L_cov * delta_gamma_ncp[c];
   }
@@ -84,7 +75,7 @@ model {
   L_delta_gamma ~ lkj_corr_cholesky(5.0 * sqrt(N_movies));
 
   for (c in 1:N_customers)
-    cut_points[c] ~ induced_dirichlet(alpha, 0);
+    cut_points[c] ~ induced_dirichlet(alpha);
   mu_q ~ dirichlet(5 * ones);
   tau_q ~ normal(0, 1);
 
@@ -98,6 +89,8 @@ model {
 }
 
 generated quantities {
+  matrix[N_movies, N_movies] Phi;
+
   array[N_ratings] int<lower=1, upper=5> rating_pred;
 
   array[N_customers] real mean_rating_customer_pred
@@ -109,6 +102,12 @@ generated quantities {
   array[N_movies] real var_rating_movie_pred = rep_array(0, N_movies);
 
   matrix[N_movies, N_movies] covar_rating_movie_pred;
+
+  {
+    matrix[N_movies, N_movies] L_cov
+      = diag_pre_multiply(tau_delta_gamma, L_delta_gamma);
+    Phi = L_cov * L_cov';
+  }
 
   {
     array[N_customers] real C = rep_array(0, N_customers);
