@@ -261,7 +261,7 @@ util$plot_line_hist(data$k_tox, 0.5, data$K_tox + 0.5, 1,
 ```
 
 Finally some of the patients in the observed cohort have taken advantage
-of assisted reproduction technologies, or ART, which can drastically
+of assisted reproductive technologies, or ART, which can drastically
 increase fertility.  Similar to the fertility outcomes, and unlike the
 clinical and demographic information, ART participation is `0-1` coded,
 with `0` indicating no participation and `1` participation.
@@ -322,7 +322,7 @@ of probability density functions specifies a diversity of candidate
 probability distributions over the unit interval.
 
 To select a prior model from these candidates we need to define
-consistency, although we don't have to be too previous.  I like to
+consistency, although we don't have to be too precious.  I like to
 define consistency with tail probability conditions,
 \begin{align*}
 \delta
@@ -1871,7 +1871,7 @@ events, but here we will make a simpler assumption that the two methods
 of conception are approximately independent so that an observed
 conception is given by a success with either method or both.
 
-Given this assumptions there are a few ways to calculate the overall
+Given this assumption there are a few ways to calculate the overall
 conception probability for a given patient.
 
 One way is to recognize that the probability of no conception is equal
