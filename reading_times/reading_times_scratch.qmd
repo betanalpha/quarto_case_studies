@@ -1,0 +1,77 @@
+```{r}
+#| warning: false
+#| message: false
+#| cache: true
+fit <- stan(file='stan_programs/dat1_rounding.stan',
+            data=data, seed=8438338,
+            warmup=1000, iter=2024, refresh=10)
+```
+
+Interesting we see exactly the same diagnostic warnings that we
+encountered when trying to explore the uncensored log normal
+direct-access model.
+
+```{r}
+diagnostics <- util$extract_hmc_diagnostics(fit)
+util$check_all_hmc_diagnostics(diagnostics)
+
+samples_dat1r <- util$extract_expectand_vals(fit)
+base_samples <- util$filter_expectands(samples_dat1r,
+                                       c('nu',
+                                         'delta_free',
+                                         'zeta_free',
+                                         'omega',
+                                         'phi1', 'phi2',
+                                         'lambda_SR', 'lambda_OR'),
+                                       TRUE)
+util$summarize_expectand_diagnostics(base_samples)
+```
+
+Indeed the posterior multimodality is nearly identical.
+
+```{r}
+util$plot_pairs_by_chain(samples_dat1[['omega']], 'omega',
+                         samples_dat1[['lambda_SR']], 'lambda_SR')
+
+util$plot_pairs_by_chain(samples_dat1r[['omega']], 'omega',
+                         samples_dat1r[['lambda_SR']], 'lambda_SR')
+```
+
+Moreover, the posterior retrodictive behavior seems to be
+unaffected by the rounding.
+
+```{r}
+par(mfrow=c(2, 2), mar=c(5, 5, 3, 1))
+
+util$plot_hist_quantiles(lapply(samples_dat1,
+                                function(s) s[c(1, 3),]),
+                         'log_reading_time_pred', 4, 10, 0.1,
+                         baseline_values=log(data$reading_time),
+                         xlab='Log Reading Time / 1 ms',
+                         main='Markov Chains 1 and 3')
+
+util$plot_hist_quantiles(lapply(samples_dat1,
+                                function(s) s[c(2, 4),]),
+                         'log_reading_time_pred', 4, 10, 0.1,
+                         baseline_values=log(data$reading_time),
+                         xlab='Log Reading Time / 1 ms',
+                         main='Markov Chains 2 and 4')
+
+
+util$plot_hist_quantiles(lapply(samples_dat1r,
+                                function(s) s[c(1, 3),]),
+                         'log_reading_time_pred', 4, 10, 0.1,
+                         baseline_values=log(data$reading_time),
+                         xlab='Log Reading Time / 1 ms',
+                         main='Markov Chains 1 and 3 (Censored)')
+
+util$plot_hist_quantiles(lapply(samples_dat1r,
+                                function(s) s[c(2, 4),]),
+                         'log_reading_time_pred', 4, 10, 0.1,
+                         baseline_values=log(data$reading_time),
+                         xlab='Log Reading Time / 1 ms',
+                         main='Markov Chains 2 and 4 (Censored)')
+```
+
+In this case rounding doesn't appreciably change the behavior of
+the continuous model.
