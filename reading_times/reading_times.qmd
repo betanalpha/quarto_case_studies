@@ -1,7 +1,7 @@
 ---
 title: "Clausal Inference"
 author: "Michael Betancourt"
-date: "January 2025"
+date: "January 2026"
 date-format: "MMMM YYYY"
 toc: true
 number-sections: true
@@ -1383,7 +1383,7 @@ predictive distribution with a
 Note the terminology here -- we're implementing a _retrodictive_
 check because we're evaluating how well the model retrodicts data
 that it has already seen.  _Predictive_ checks require
-comparisons to new observations.
+comparisons to _new_ observations.
 
 Each posterior retrodictive check starts with a summary statistic
 that isolates an interpretable, relevant feature of the
@@ -1907,16 +1907,21 @@ util$plot_pairs_by_chain(samples_dat1[['omega']], 'omega',
 
 There is no guarantee that these are all of the posterior modes,
 nor that either of these modes actually provide a non-negligible
-influence to posterior inferences.  Multimodal posterior
-distributions are notoriously difficult to quantify, but at least
-Markov chain Monte Carlo provides useful diagnostic information.
+contribution to posterior inferences.  Moreover, the mode to
+which each Markov chain converges is not deterministic.  If you
+run this code yourself then you might see each Markov chain find
+the other mode!
+
+Multimodal posterior distributions are notoriously difficult to
+quantify.  That said, Markov chain Monte Carlo at least provides
+useful diagnostic information.
 
 ### Posterior Retrodictive Checks
 
 One way to qualify the relative importance of each mode is to
 compare how consistent they are with the observed data.  In other
 words we can perform posterior retrodictive checks separately for
-each pair of Markov chains.
+each set of Markov chains.
 
 ```{r}
 #| cache: true
@@ -1924,37 +1929,37 @@ each pair of Markov chains.
 par(mfrow=c(1, 2), mar=c(5, 5, 1, 1))
 
 util$plot_hist_quantiles(lapply(samples_dat1,
-                                function(s) s[c(1, 3),]),
+                                function(s) s[c(1, 2, 4),]),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 1 and 3')
+                         main='Markov Chains 1, 2, and 4')
 
 util$plot_hist_quantiles(lapply(samples_dat1,
-                                function(s) s[c(2, 4),]),
+                                function(s) array(s[3,], dim=c(1, 1024))),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 2 and 4')
+                         main='Markov Chain 3')
 ```
 
 Because $\omega$ is so close to zero in the model configurations
-explored by the second and forth Markov chains, the posterior
-predictive reading time behavior exhibits only a single peak
-which clashes with the observed reading time behavior.  On the
-other hand, the first and third Markov chains appear to be
-exploring behaviors that are much more consistent with the
-observed data.  Formally quantifying the relative consistency,
-however, is difficult.
+explored by the third Markov chain, the posterior predictive
+reading time behavior exhibits only a single peak.  This clashes
+with the observed reading time behavior.  On the other hand, the
+first, second, and forth Markov chains appear to be exploring
+behaviors that are much more consistent with the observed data.
+Formally quantifying the relative consistency, however, is
+difficult.
 
-All of that said, the retrodictive performance for the first and
-third Markov chains still leaves something to be desired.  If we
-zoom in we see that, while the posterior predictive behavior is
-able to replicate the observed peaks, the posterior predictive
-tails are not quite right.  Similar to what we saw with the
-log-normal dependency locality model, the posterior predictive
-lower tail is too heavy and the posterior predictive upper tail
-is too light.
+All of that said, the retrodictive performance for the first,
+second, and forth Markov chains still leaves something to be
+desired.  If we zoom in then we see that, while the posterior
+predictive behavior is able to replicate the observed peaks, the
+posterior predictive tails are not quite right.  Similar to what
+we saw with the log-normal dependency locality model, the
+posterior predictive lower tail is too heavy and the posterior
+predictive upper tail is too light.
 
 ```{r}
 #| cache: true
@@ -1962,15 +1967,15 @@ is too light.
 par(mfrow=c(1, 1), mar=c(5, 5, 1, 1))
 
 util$plot_hist_quantiles(lapply(samples_dat1,
-                                function(s) s[c(1, 3),]),
+                                function(s) s[c(1, 2, 4),]),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 1 and 3')
+                         main='Markov Chains 1, 2, 4')
 ```
 
-Even if the mode explored by the second and forth Markov chains
-is irrelevant, the posterior retrodictive tension in the mode
+Even if the mode explored by the third Markov chain is
+irrelevant, the posterior retrodictive tension in the mode
 explored by the first and third Markov chains suggests that we
 can improve the direct-access model by adding a bit more
 asymmetry to the component models.
@@ -2224,14 +2229,15 @@ util$plot_expectand_pushforward(samples_dat2[['lambda_SR']], 25,
                                 ylim=c(0, 25),
                                 display_name="Initial Success Probability",
                                 col=util$c_mid)
-text(0.35, 15, 'Object\nRelative', col=util$c_mid)
+text(0.25, 12, 'Subject\nRelative', col=util$c_mid)
 
 util$plot_expectand_pushforward(samples_dat2[['lambda_OR']], 25,
                                 flim=c(0.2, 0.4),
                                 col=util$c_dark,
                                 border="#BBBBBB88",
                                 add=TRUE)
-text(0.25, 12, 'Subject\nRelative', col=util$c_dark)
+text(0.35, 15, 'Object\nRelative', col=util$c_dark)
+
 ```
 
 We can even quantify the preference for the first component model
@@ -2308,7 +2314,7 @@ once again manifests in larger posterior uncertainties.  For
 those subjects whose reading times were recorded, Subject 19
 seems to be about
 $$
-\exp(1.25) \approx 3.5
+\exp(0.5 - (-0.75)) \approx 3.5
 $$
 times better at parsing the target texts than Subject 12.
 
@@ -2703,21 +2709,39 @@ is an artifact of slightly larger posterior uncertainties caused
 by the increased flexibility of the joint model.
 
 ```{r}
-par(mfrow=c(1, 1), mar = c(5, 4, 2, 1))
+par(mfrow=c(2, 1), mar = c(5, 4, 2, 1))
+
+util$plot_expectand_pushforward(samples_dat2[['lambda_SR']], 25,
+                                flim=c(0.2, 0.4),
+                                ylim=c(0, 25),
+                                display_name="Initial Success Probability",
+                                col=util$c_mid,
+                                main="Direct Access Theory Model")
+text(0.25, 12, 'Subject\nRelative', col=util$c_mid)
+
+util$plot_expectand_pushforward(samples_dat2[['lambda_OR']], 25,
+                                flim=c(0.2, 0.4),
+                                col=util$c_dark,
+                                border="#BBBBBB88",
+                                add=TRUE)
+text(0.35, 15, 'Object\nRelative', col=util$c_dark)
+
+
 
 util$plot_expectand_pushforward(samples_joint[['lambda_SR']], 25,
                                 flim=c(0.2, 0.4),
                                 ylim=c(0, 25),
                                 display_name="Initial Success Probability",
-                                col=util$c_mid)
-text(0.35, 15, 'Object\nRelative', col=util$c_mid)
+                                col=util$c_mid,
+                                main="Joint Model")
+text(0.25, 12, 'Subject\nRelative', col=util$c_mid)
 
 util$plot_expectand_pushforward(samples_joint[['lambda_OR']], 25,
                                 flim=c(0.2, 0.4),
                                 col=util$c_dark,
                                 border="#BBBBBB88",
                                 add=TRUE)
-text(0.25, 12, 'Subject\nRelative', col=util$c_dark)
+text(0.35, 15, 'Object\nRelative', col=util$c_dark)
 ```
 
 This doesn't, however, imply that the behaviors from the
@@ -2941,8 +2965,7 @@ fit <- stan(file='stan_programs/dat1_rounding.stan',
 
 Interestingly, we see similar split $\hat{r}$ diagnostic warnings
 that we encountered when trying to explore the uncensored log
-normal direct-access model.  In addition a stray divergence has
-popped up.
+normal direct-access model.
 
 ```{r}
 diagnostics <- util$extract_hmc_diagnostics(fit)
@@ -2980,33 +3003,33 @@ unaffected by the rounding.
 par(mfrow=c(2, 2), mar=c(5, 5, 3, 1))
 
 util$plot_hist_quantiles(lapply(samples_dat1,
-                                function(s) s[c(1, 3),]),
+                                function(s) s[c(1, 2, 4),]),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 1 and 3')
+                         main='Markov Chains 1, 2, 4')
 
 util$plot_hist_quantiles(lapply(samples_dat1,
-                                function(s) s[c(2, 4),]),
+                                function(s) array(s[3,], dim=c(1, 1024))),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 2 and 4')
+                         main='Markov Chain 3')
 
 
 util$plot_hist_quantiles(lapply(samples_dat1r,
-                                function(s) s[c(1, 2),]),
+                                function(s) s[c(1, 2, 4),]),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 1 and 2 (Censored)')
+                         main='Markov Chains 1, 2, 4 (Censored)')
 
 util$plot_hist_quantiles(lapply(samples_dat1r,
-                                function(s) s[c(3, 4),]),
+                                function(s) array(s[3,], dim=c(1, 1024))),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 3 and 4 (Censored)')
+                         main='Markov Chain 3 (Censored)')
 ```
 
 In this case rounding doesn't appreciably change the behavior of
@@ -3021,6 +3044,7 @@ similar family of discrete probability models.
 For example, in the direct-access model,
 $$
 p( t_{ij} \mid \theta)
+=
        \lambda  \, p_{1}( t_{ij} \mid \mu_{1, ij}, \phi_{1})
 + (1 - \lambda) \, p_{2}( t_{ij} \mid \mu_{2, ij}, \phi_{2})
 $$
@@ -3035,11 +3059,11 @@ to be implemented differently in every software package.  To
 mimic the location-scale parameterization of the log normal and
 inverse gamma models we'll need to use
 ```stan
-neg_binomial_2_lpdf(y | mu, 1 / phi)
+neg_binomial_2_lpmf(y | exp(log_mu), 1 / phi)
 ```
 or, equivalently,
 ```stan
-neg_binomial_2_log_lpdf(y | log_mu, 1 / phi)
+neg_binomial_2_log_lpmf(y | log_mu, 1 / phi)
 ```
 in the `Stan` modeling language.  This ensures that
 $\phi \rightarrow 0$ configures the narrowest, most symmetric
@@ -3103,32 +3127,32 @@ is more similar to the log normal model.
 par(mfrow=c(2, 2), mar=c(5, 5, 3, 1))
 
 util$plot_hist_quantiles(lapply(samples_dat1,
-                                function(s) s[c(1, 3),]),
+                                function(s) s[c(1, 2, 4),]),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 1 and 3 (Log Normal)')
+                         main='Markov Chains 1, 2, 4 (Log Normal)')
 
 util$plot_hist_quantiles(lapply(samples_dat1,
-                                function(s) s[c(2, 4),]),
+                                function(s) array(s[3,], dim=c(1, 1024))),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 2 and 4 (Log Normal)')
+                         main='Markov Chain 3 (Log Normal)')
 
 util$plot_hist_quantiles(lapply(samples_dat_nb,
-                                function(s) s[c(1, 4),]),
+                                function(s) s[c(1, 2, 4),]),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 1 and 4 (Negative Binomial)')
+                         main='Markov Chains 1, 2, 4 (Negative Binomial)')
 
 util$plot_hist_quantiles(lapply(samples_dat_nb,
-                                function(s) s[c(2, 3),]),
+                                function(s) array(s[3,], dim=c(1, 1024))),
                          'log_reading_time_pred', 4, 10, 0.1,
                          baseline_values=log(data$reading_time),
                          xlab='Log Reading Time / 1 ms',
-                         main='Markov Chains 2 and 3 (Negative Binomial)')
+                         main='Markov Chain 3 (Negative Binomial)')
 ```
 
 Whenever a model appears to be too rigid to adequately fit the
@@ -3247,7 +3271,8 @@ scientific goals to meet our analysis techniques.
 
 I thank Ted Gibson for graciously making the data available and
 Shravan Vasishth for generously sharing his domain expertise as
-well as many helpful comments.
+well as many helpful comments.  Additionally, I thank jd for
+helpful feedback.
 
 A very special thanks to everyone supporting me on Patreon:
 Adam Fleischhacker, Alejandro Morales, Alessandro Varacca, Alex D, Alexander Noll, Amit, Andrea Serafino, Andrew Mascioli, Andrew Rouillard, Ara Winter, Ari Holtzman, Austin Rochford, Aviv Keshet, Avraham Adler, Ben Matthews, Ben Swallow, Benoit Essiambre, boot, Brendan Galdo, Bryan Chang, Brynjolfur Gauti Jónsson, Cameron Smith, Canaan Breiss, Cat Shark, Cathy Oliveri, Charles Naylor, Chase Dwelle, Chris Jones, Christina Van Heer, Christopher Mehrvarzi, Colin Carroll, Colin McAuliffe, Damien Mannion, dan mackinlay, Dan W Joyce, Dan Waxman, Dan Weitzenfeld, Danny Van Nest, David Burdelski, Doug Rivers, Dr. Jobo, Dr. Omri Har Shemesh, Dylan Maher, Dylan Spielman, Ebriand, Ed Cashin, Edgar Merkle, Edoardo Marcora, Eric LaMotte, Erik Banek, Eugene O'Friel, Felipe González, Fergus Chadwick, Finn Lindgren, Francesco Corona, Geoff Rollins, Granville Matheson, Gregor Gorjanc, Guilherme Marthe, Hamed Bastan-Hagh, haubur, Hector Munoz, Henri Wallen, hs, Hugo Botha, Håkan Johansson, Ian Costley, idontgetoutmuch, Ignacio Vera, Ilaria Prosdocimi, Isaac Vock, Isidor Belic, jacob pine, Jair Andrade, James C, James Hodgson, James Wade, Janek Berger, Jarrett Byrnes, Jason Martin, Jason Pekos, Jason Wong, jd, Jeff Burnett, Jeff Dotson, Jeff Helzner, Jeffrey Erlich, Jerry Lin , Jessica Graves, Joe Sloan, John Flournoy, Jonathan H. Morgan, Josh Knecht, JU, Julian Lee, June, Justin Bois, Karim Naguib, Karim Osman, Konstantin Shakhbazov, Kristian Gårdhus Wichmann, Kádár András, Lars Barquist, lizzie , LOU ODETTE, Luís F, Mads Christian Hansen, Marek Kwiatkowski, Mariana Carmona, Mark Donoghoe, Markus P., Daniel Edward Marthaler, Matthew, Matthew Kay, Matthieu LEROY, Mattia Arsendi, Matěj, Maurits van der Meer, Max, Michael Colaresi, Michael DeWitt, Michael Dillon, Michael Lerner, Mick Cooney, MisterMentat , Márton Vaitkus, N Sanders, N.S. , Nathaniel Burbank, Nicholas Cowie, Nick S, Nikita Karetnikov, Octavio Medina, Ole Rogeberg, Oliver Crook, Patrick  Kelley, Patrick Boehnke, Pau Pereira Batlle, Peter Johnson, Pieter van den Berg , ptr, quasar, Ramiro Barrantes Reynolds, Ravin Kumar, Raúl Peralta Lozada, Rex, Riccardo Fusaroli, Richard Nerland, Robert Frost, Robert Goldman, Robert kohn, Robin Taylor, Ryan Gan, Ryan Grossman, Ryan Kelly, S Hong, Sean Wilson, Sergiy Protsiv, Seth Axen, shira, Simon Duane, Simon Lilburn, Simon Steiger, Simone, Spencer Boucher, sssz, Stefan Lorenz, Stephen Lienhard, Steve Harris, Steven Forrest, Stew Watts, Stone Chen, Susan Holmes, Svilup, Tate Tunstall, Tatsuo Okubo, Teresa Ortiz, Theodore Dasher, Thomas Siegert, Thomas Vladeck, Tobychev , Tomas Capretto, Tony Wuersch, Virgile Andreani, Virginia Fisher, Vitalie Spinu, Vladimir Markov, VO2 Maximus Decius, Will Farr, Will Lowe, Will Wen, woejozney, yolhaj , yureq , Zach A, and Zhengchen Cai.

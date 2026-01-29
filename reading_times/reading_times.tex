@@ -214,7 +214,7 @@ Program}
 
 \title{Clausal Inference}
 \author{Michael Betancourt}
-\date{January 2025}
+\date{January 2026}
 
 \begin{document}
 \maketitle
@@ -1812,7 +1812,7 @@ predictive distribution with a
 retrodictive check}. Note the terminology here -- we're implementing a
 \emph{retrodictive} check because we're evaluating how well the model
 retrodicts data that it has already seen. \emph{Predictive} checks
-require comparisons to new observations.
+require comparisons to \emph{new} observations.
 
 Each posterior retrodictive check starts with a summary statistic that
 isolates an interpretable, relevant feature of the observational space.
@@ -2871,17 +2871,21 @@ reading time behaviors.
 \includegraphics{reading_times_files/figure-pdf/unnamed-chunk-38-1.pdf}
 
 There is no guarantee that these are all of the posterior modes, nor
-that either of these modes actually provide a non-negligible influence
-to posterior inferences. Multimodal posterior distributions are
-notoriously difficult to quantify, but at least Markov chain Monte Carlo
-provides useful diagnostic information.
+that either of these modes actually provide a non-negligible
+contribution to posterior inferences. Moreover, the mode to which each
+Markov chain converges is not deterministic. If you run this code
+yourself then you might see each Markov chain find the other mode!
+
+Multimodal posterior distributions are notoriously difficult to
+quantify. That said, Markov chain Monte Carlo at least provides useful
+diagnostic information.
 
 \subsubsection{Posterior Retrodictive
 Checks}\label{posterior-retrodictive-checks-1}
 
 One way to qualify the relative importance of each mode is to compare
 how consistent they are with the observed data. In other words we can
-perform posterior retrodictive checks separately for each pair of Markov
+perform posterior retrodictive checks separately for each set of Markov
 chains.
 
 \begin{Shaded}
@@ -2889,17 +2893,33 @@ chains.
 \FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{), }\AttributeTok{mar=}\FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{5}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{))}
 
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{3}\NormalTok{),]),}
+                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1 and 3\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1, 2, and 4\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 1437 predictive values (0.0%) fell below the binning.
+"predictive value"): 28 predictive values (0.0%) fell below the binning.
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
+                                \ControlFlowTok{function}\NormalTok{(s) }\FunctionTok{array}\NormalTok{(s[}\DecValTok{3}\NormalTok{,], }\AttributeTok{dim=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1024}\NormalTok{))),}
+                         \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
+                         \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
+                         \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chain 3\textquotesingle{}}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
+"predictive value"): 1427 predictive values (0.1%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -2907,70 +2927,48 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 "predictive value"): 23 predictive values (0.0%) fell above the binning.
 \end{verbatim}
 
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
-                         \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
-                         \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
-                         \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 2 and 4\textquotesingle{}}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 18 predictive values (0.0%) fell below the binning.
-\end{verbatim}
-
 \includegraphics{reading_times_files/figure-pdf/unnamed-chunk-39-1.pdf}
 
 Because \(\omega\) is so close to zero in the model configurations
-explored by the second and forth Markov chains, the posterior predictive
-reading time behavior exhibits only a single peak which clashes with the
-observed reading time behavior. On the other hand, the first and third
-Markov chains appear to be exploring behaviors that are much more
-consistent with the observed data. Formally quantifying the relative
-consistency, however, is difficult.
+explored by the third Markov chain, the posterior predictive reading
+time behavior exhibits only a single peak. This clashes with the
+observed reading time behavior. On the other hand, the first, second,
+and forth Markov chains appear to be exploring behaviors that are much
+more consistent with the observed data. Formally quantifying the
+relative consistency, however, is difficult.
 
-All of that said, the retrodictive performance for the first and third
-Markov chains still leaves something to be desired. If we zoom in we see
-that, while the posterior predictive behavior is able to replicate the
-observed peaks, the posterior predictive tails are not quite right.
-Similar to what we saw with the log-normal dependency locality model,
-the posterior predictive lower tail is too heavy and the posterior
-predictive upper tail is too light.
+All of that said, the retrodictive performance for the first, second,
+and forth Markov chains still leaves something to be desired. If we zoom
+in then we see that, while the posterior predictive behavior is able to
+replicate the observed peaks, the posterior predictive tails are not
+quite right. Similar to what we saw with the log-normal dependency
+locality model, the posterior predictive lower tail is too heavy and the
+posterior predictive upper tail is too light.
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{mar=}\FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{5}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{))}
 
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{3}\NormalTok{),]),}
+                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1 and 3\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1, 2, 4\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 1437 predictive values (0.0%) fell below the binning.
-\end{verbatim}
-
-\begin{verbatim}
-Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 23 predictive values (0.0%) fell above the binning.
+"predictive value"): 28 predictive values (0.0%) fell below the binning.
 \end{verbatim}
 
 \includegraphics{reading_times_files/figure-pdf/unnamed-chunk-40-1.pdf}
 
-Even if the mode explored by the second and forth Markov chains is
-irrelevant, the posterior retrodictive tension in the mode explored by
-the first and third Markov chains suggests that we can improve the
-direct-access model by adding a bit more asymmetry to the component
-models.
+Even if the mode explored by the third Markov chain is irrelevant, the
+posterior retrodictive tension in the mode explored by the first and
+third Markov chains suggests that we can improve the direct-access model
+by adding a bit more asymmetry to the component models.
 
 \subsection{Inverse Gamma Direct-Access
 Model}\label{inverse-gamma-direct-access-model}
@@ -3609,14 +3607,14 @@ parse. At least, that is, for Chinese.
                                 \AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{25}\NormalTok{),}
                                 \AttributeTok{display\_name=}\StringTok{"Initial Success Probability"}\NormalTok{,}
                                 \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
-\FunctionTok{text}\NormalTok{(}\FloatTok{0.35}\NormalTok{, }\DecValTok{15}\NormalTok{, }\StringTok{\textquotesingle{}Object}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{0.25}\NormalTok{, }\DecValTok{12}\NormalTok{, }\StringTok{\textquotesingle{}Subject}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
 
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples\_dat2[[}\StringTok{\textquotesingle{}lambda\_OR\textquotesingle{}}\NormalTok{]], }\DecValTok{25}\NormalTok{,}
                                 \AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\FloatTok{0.2}\NormalTok{, }\FloatTok{0.4}\NormalTok{),}
                                 \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark,}
                                 \AttributeTok{border=}\StringTok{"\#BBBBBB88"}\NormalTok{,}
                                 \AttributeTok{add=}\ConstantTok{TRUE}\NormalTok{)}
-\FunctionTok{text}\NormalTok{(}\FloatTok{0.25}\NormalTok{, }\DecValTok{12}\NormalTok{, }\StringTok{\textquotesingle{}Subject}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{0.35}\NormalTok{, }\DecValTok{15}\NormalTok{, }\StringTok{\textquotesingle{}Object}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
 \end{Highlighting}
 \end{Shaded}
 
@@ -3710,7 +3708,7 @@ What about the relative subject skills?
 The lack of any observations involving Subjects 10, 12, and 25 once
 again manifests in larger posterior uncertainties. For those subjects
 whose reading times were recorded, Subject 19 seems to be about \[
-\exp(1.25) \approx 3.5
+\exp(0.5 - (-0.75)) \approx 3.5
 \] times better at parsing the target texts than Subject 12.
 
 \begin{Shaded}
@@ -4495,21 +4493,39 @@ the joint model.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{mar =} \FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{))}
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{mar =} \FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{))}
+
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples\_dat2[[}\StringTok{\textquotesingle{}lambda\_SR\textquotesingle{}}\NormalTok{]], }\DecValTok{25}\NormalTok{,}
+                                \AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\FloatTok{0.2}\NormalTok{, }\FloatTok{0.4}\NormalTok{),}
+                                \AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{25}\NormalTok{),}
+                                \AttributeTok{display\_name=}\StringTok{"Initial Success Probability"}\NormalTok{,}
+                                \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid,}
+                                \AttributeTok{main=}\StringTok{"Direct Access Theory Model"}\NormalTok{)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{0.25}\NormalTok{, }\DecValTok{12}\NormalTok{, }\StringTok{\textquotesingle{}Subject}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
+
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples\_dat2[[}\StringTok{\textquotesingle{}lambda\_OR\textquotesingle{}}\NormalTok{]], }\DecValTok{25}\NormalTok{,}
+                                \AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\FloatTok{0.2}\NormalTok{, }\FloatTok{0.4}\NormalTok{),}
+                                \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark,}
+                                \AttributeTok{border=}\StringTok{"\#BBBBBB88"}\NormalTok{,}
+                                \AttributeTok{add=}\ConstantTok{TRUE}\NormalTok{)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{0.35}\NormalTok{, }\DecValTok{15}\NormalTok{, }\StringTok{\textquotesingle{}Object}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+
+
 
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples\_joint[[}\StringTok{\textquotesingle{}lambda\_SR\textquotesingle{}}\NormalTok{]], }\DecValTok{25}\NormalTok{,}
                                 \AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\FloatTok{0.2}\NormalTok{, }\FloatTok{0.4}\NormalTok{),}
                                 \AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{25}\NormalTok{),}
                                 \AttributeTok{display\_name=}\StringTok{"Initial Success Probability"}\NormalTok{,}
-                                \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
-\FunctionTok{text}\NormalTok{(}\FloatTok{0.35}\NormalTok{, }\DecValTok{15}\NormalTok{, }\StringTok{\textquotesingle{}Object}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
+                                \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid,}
+                                \AttributeTok{main=}\StringTok{"Joint Model"}\NormalTok{)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{0.25}\NormalTok{, }\DecValTok{12}\NormalTok{, }\StringTok{\textquotesingle{}Subject}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_mid)}
 
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_expectand\_pushforward}\NormalTok{(samples\_joint[[}\StringTok{\textquotesingle{}lambda\_OR\textquotesingle{}}\NormalTok{]], }\DecValTok{25}\NormalTok{,}
                                 \AttributeTok{flim=}\FunctionTok{c}\NormalTok{(}\FloatTok{0.2}\NormalTok{, }\FloatTok{0.4}\NormalTok{),}
                                 \AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark,}
                                 \AttributeTok{border=}\StringTok{"\#BBBBBB88"}\NormalTok{,}
                                 \AttributeTok{add=}\ConstantTok{TRUE}\NormalTok{)}
-\FunctionTok{text}\NormalTok{(}\FloatTok{0.25}\NormalTok{, }\DecValTok{12}\NormalTok{, }\StringTok{\textquotesingle{}Subject}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
+\FunctionTok{text}\NormalTok{(}\FloatTok{0.35}\NormalTok{, }\DecValTok{15}\NormalTok{, }\StringTok{\textquotesingle{}Object}\SpecialCharTok{\textbackslash{}n}\StringTok{Relative\textquotesingle{}}\NormalTok{, }\AttributeTok{col=}\NormalTok{util}\SpecialCharTok{$}\NormalTok{c\_dark)}
 \end{Highlighting}
 \end{Shaded}
 
@@ -5004,7 +5020,7 @@ distribution function is much more computationally robust.
 
 Interestingly, we see similar split \(\hat{r}\) diagnostic warnings that
 we encountered when trying to explore the uncensored log normal
-direct-access model. In addition a stray divergence has popped up.
+direct-access model.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -5095,17 +5111,33 @@ the rounding.
 \FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{), }\AttributeTok{mar=}\FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{5}\NormalTok{, }\DecValTok{3}\NormalTok{, }\DecValTok{1}\NormalTok{))}
 
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{3}\NormalTok{),]),}
+                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1 and 3\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1, 2, 4\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 1437 predictive values (0.0%) fell below the binning.
+"predictive value"): 28 predictive values (0.0%) fell below the binning.
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
+                                \ControlFlowTok{function}\NormalTok{(s) }\FunctionTok{array}\NormalTok{(s[}\DecValTok{3}\NormalTok{,], }\AttributeTok{dim=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1024}\NormalTok{))),}
+                         \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
+                         \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
+                         \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chain 3\textquotesingle{}}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
+"predictive value"): 1427 predictive values (0.1%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -5115,50 +5147,34 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1r,}
+                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 2 and 4\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1, 2, 4 (Censored)\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 18 predictive values (0.0%) fell below the binning.
+"predictive value"): 24 predictive values (0.0%) fell below the binning.
 \end{verbatim}
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1r,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{),]),}
+                                \ControlFlowTok{function}\NormalTok{(s) }\FunctionTok{array}\NormalTok{(s[}\DecValTok{3}\NormalTok{,], }\AttributeTok{dim=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1024}\NormalTok{))),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1 and 2 (Censored)\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chain 3 (Censored)\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 21 predictive values (0.0%) fell below the binning.
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1r,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{3}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
-                         \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
-                         \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
-                         \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 3 and 4 (Censored)\textquotesingle{}}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 1505 predictive values (0.0%) fell below the binning.
+"predictive value"): 1502 predictive values (0.1%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -5180,6 +5196,7 @@ discrete probability models.
 
 For example, in the direct-access model, \[
 p( t_{ij} \mid \theta)
+=
        \lambda  \, p_{1}( t_{ij} \mid \mu_{1, ij}, \phi_{1})
 + (1 - \lambda) \, p_{2}( t_{ij} \mid \mu_{2, ij}, \phi_{2})
 \] we might consider using a negative binomial model for \(p_{1}\) and
@@ -5195,7 +5212,7 @@ models we'll need to use
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{neg\_binomial\_2\_lpdf(y | mu, }\DecValTok{1}\NormalTok{ / phi)}
+\NormalTok{neg\_binomial\_2\_lpmf(y | exp(log\_mu), }\DecValTok{1}\NormalTok{ / phi)}
 \end{Highlighting}
 \end{Shaded}
 
@@ -5203,7 +5220,7 @@ or, equivalently,
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{neg\_binomial\_2\_log\_lpdf(y | log\_mu, }\DecValTok{1}\NormalTok{ / phi)}
+\NormalTok{neg\_binomial\_2\_log\_lpmf(y | log\_mu, }\DecValTok{1}\NormalTok{ / phi)}
 \end{Highlighting}
 \end{Shaded}
 
@@ -5456,17 +5473,33 @@ similar to the log normal model.
 \FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow=}\FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{), }\AttributeTok{mar=}\FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{5}\NormalTok{, }\DecValTok{3}\NormalTok{, }\DecValTok{1}\NormalTok{))}
 
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{3}\NormalTok{),]),}
+                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1 and 3 (Log Normal)\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1, 2, 4 (Log Normal)\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 1437 predictive values (0.0%) fell below the binning.
+"predictive value"): 28 predictive values (0.0%) fell below the binning.
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
+                                \ControlFlowTok{function}\NormalTok{(s) }\FunctionTok{array}\NormalTok{(s[}\DecValTok{3}\NormalTok{,], }\AttributeTok{dim=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1024}\NormalTok{))),}
+                         \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
+                         \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
+                         \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chain 3 (Log Normal)\textquotesingle{}}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
+"predictive value"): 1427 predictive values (0.1%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -5476,50 +5509,34 @@ Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat1,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
+\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat\_nb,}
+                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 2 and 4 (Log Normal)\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1, 2, 4 (Negative Binomial)\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 18 predictive values (0.0%) fell below the binning.
+"predictive value"): 4014 predictive values (0.0%) fell below the binning.
 \end{verbatim}
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat\_nb,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{4}\NormalTok{),]),}
+                                \ControlFlowTok{function}\NormalTok{(s) }\FunctionTok{array}\NormalTok{(s[}\DecValTok{3}\NormalTok{,], }\AttributeTok{dim=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1024}\NormalTok{))),}
                          \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
                          \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
                          \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 1 and 4 (Negative Binomial)\textquotesingle{}}\NormalTok{)}
+                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chain 3 (Negative Binomial)\textquotesingle{}}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \begin{verbatim}
 Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 2649 predictive values (0.0%) fell below the binning.
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{util}\SpecialCharTok{$}\FunctionTok{plot\_hist\_quantiles}\NormalTok{(}\FunctionTok{lapply}\NormalTok{(samples\_dat\_nb,}
-                                \ControlFlowTok{function}\NormalTok{(s) s[}\FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{3}\NormalTok{),]),}
-                         \StringTok{\textquotesingle{}log\_reading\_time\_pred\textquotesingle{}}\NormalTok{, }\DecValTok{4}\NormalTok{, }\DecValTok{10}\NormalTok{, }\FloatTok{0.1}\NormalTok{,}
-                         \AttributeTok{baseline\_values=}\FunctionTok{log}\NormalTok{(data}\SpecialCharTok{$}\NormalTok{reading\_time),}
-                         \AttributeTok{xlab=}\StringTok{\textquotesingle{}Log Reading Time / 1 ms\textquotesingle{}}\NormalTok{,}
-                         \AttributeTok{main=}\StringTok{\textquotesingle{}Markov Chains 2 and 3 (Negative Binomial)\textquotesingle{}}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-Warning in check_bin_containment(bin_min, bin_max, collapsed_values,
-"predictive value"): 28651 predictive values (0.5%) fell below the binning.
+"predictive value"): 27286 predictive values (1.0%) fell below the binning.
 \end{verbatim}
 
 \begin{verbatim}
@@ -5655,7 +5672,7 @@ to meet our analysis techniques.
 
 I thank Ted Gibson for graciously making the data available and Shravan
 Vasishth for generously sharing his domain expertise as well as many
-helpful comments.
+helpful comments. Additionally, I thank jd for helpful feedback.
 
 A very special thanks to everyone supporting me on Patreon: Adam
 Fleischhacker, Alejandro Morales, Alessandro Varacca, Alex D, Alexander
