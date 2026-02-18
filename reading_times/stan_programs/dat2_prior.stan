@@ -1,3 +1,16 @@
+functions {
+  // Mean-dispersion parameterization of inverse gamma family
+  real inv_gamma_md_lpdf(real x, real log_mu, real psi) {
+    return inv_gamma_lpdf(x | inv(psi) + 2,
+                              exp(log_mu) * (inv(psi) + 1));
+  }
+
+  real inv_gamma_md_rng(real log_mu, real psi) {
+    return inv_gamma_rng(inv(psi) + 2,
+                         exp(log_mu) * (inv(psi) + 1));
+  }
+}
+
 data {
   int<lower=1> N; // Number of observations
 
@@ -56,18 +69,18 @@ generated quantities {
     if (subj_rel[n] == 1) {
       if (bernoulli_rng(lambda_SR)) {
         log_reading_time_pred[n]
-          = log(lognormal_rng(log_mu,         phi1));
+          = log(inv_gamma_md_rng(log_mu,         phi1));
       } else {
         log_reading_time_pred[n]
-          = log(lognormal_rng(log_mu + omega, phi2));
+          = log(inv_gamma_md_rng(log_mu + omega, phi2));
       }
     } else {
        if (bernoulli_rng(lambda_OR)) {
         log_reading_time_pred[n]
-          = log(lognormal_rng(log_mu,         phi1));
+          = log(inv_gamma_md_rng(log_mu,         phi1));
       } else {
         log_reading_time_pred[n]
-          = log(lognormal_rng(log_mu + omega, phi2));
+          = log(inv_gamma_md_rng(log_mu + omega, phi2));
       }
     }
   }

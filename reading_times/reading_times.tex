@@ -2994,6 +2994,19 @@ domain expertise.
 
 \begin{Shaded}
 \begin{Highlighting}[]
+\KeywordTok{functions}\NormalTok{ \{}
+  \CommentTok{// Mean{-}dispersion parameterization of inverse gamma family}
+  \DataTypeTok{real}\NormalTok{ inv\_gamma\_md\_lpdf(}\DataTypeTok{real}\NormalTok{ x, }\DataTypeTok{real}\NormalTok{ log\_mu, }\DataTypeTok{real}\NormalTok{ psi) \{}
+    \ControlFlowTok{return}\NormalTok{ inv\_gamma\_lpdf(x | inv(psi) + }\DecValTok{2}\NormalTok{,}
+\NormalTok{                              exp(log\_mu) * (inv(psi) + }\DecValTok{1}\NormalTok{));}
+\NormalTok{  \}}
+
+  \DataTypeTok{real}\NormalTok{ inv\_gamma\_md\_rng(}\DataTypeTok{real}\NormalTok{ log\_mu, }\DataTypeTok{real}\NormalTok{ psi) \{}
+    \ControlFlowTok{return}\NormalTok{ inv\_gamma\_rng(inv(psi) + }\DecValTok{2}\NormalTok{,}
+\NormalTok{                         exp(log\_mu) * (inv(psi) + }\DecValTok{1}\NormalTok{));}
+\NormalTok{  \}}
+\NormalTok{\}}
+
 \KeywordTok{data}\NormalTok{ \{}
   \DataTypeTok{int}\NormalTok{\textless{}}\KeywordTok{lower}\NormalTok{=}\DecValTok{1}\NormalTok{\textgreater{} N; }\CommentTok{// Number of observations}
 
@@ -3052,18 +3065,18 @@ domain expertise.
     \ControlFlowTok{if}\NormalTok{ (subj\_rel[n] == }\DecValTok{1}\NormalTok{) \{}
       \ControlFlowTok{if}\NormalTok{ (bernoulli\_rng(lambda\_SR)) \{}
 \NormalTok{        log\_reading\_time\_pred[n]}
-\NormalTok{          = log(lognormal\_rng(log\_mu,         phi1));}
+\NormalTok{          = log(inv\_gamma\_md\_rng(log\_mu,         phi1));}
 \NormalTok{      \} }\ControlFlowTok{else}\NormalTok{ \{}
 \NormalTok{        log\_reading\_time\_pred[n]}
-\NormalTok{          = log(lognormal\_rng(log\_mu + omega, phi2));}
+\NormalTok{          = log(inv\_gamma\_md\_rng(log\_mu + omega, phi2));}
 \NormalTok{      \}}
 \NormalTok{    \} }\ControlFlowTok{else}\NormalTok{ \{}
        \ControlFlowTok{if}\NormalTok{ (bernoulli\_rng(lambda\_OR)) \{}
 \NormalTok{        log\_reading\_time\_pred[n]}
-\NormalTok{          = log(lognormal\_rng(log\_mu,         phi1));}
+\NormalTok{          = log(inv\_gamma\_md\_rng(log\_mu,         phi1));}
 \NormalTok{      \} }\ControlFlowTok{else}\NormalTok{ \{}
 \NormalTok{        log\_reading\_time\_pred[n]}
-\NormalTok{          = log(lognormal\_rng(log\_mu + omega, phi2));}
+\NormalTok{          = log(inv\_gamma\_md\_rng(log\_mu + omega, phi2));}
 \NormalTok{      \}}
 \NormalTok{    \}}
 \NormalTok{  \}}
