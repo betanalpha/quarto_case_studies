@@ -1,0 +1,66 @@
+\documentclass{standalone}
+\usepackage{graphicx}	
+\usepackage{amssymb, amsmath}
+\usepackage{color}
+
+\usepackage{tikz}
+\usetikzlibrary{math, arrows.meta, decorations.pathreplacing}
+\usepackage{pgfmath}
+
+\definecolor{light}{RGB}{220, 188, 188}
+\definecolor{mid}{RGB}{185, 124, 124}
+\definecolor{dark}{RGB}{143, 39, 39}
+\definecolor{highlight}{RGB}{180, 31, 180}
+\definecolor{lightteal}{RGB}{186, 219, 219}
+\definecolor{midteal}{RGB}{124, 186, 186}
+\definecolor{darkteal}{RGB}{38, 142, 142}
+\definecolor{darkerteal}{RGB}{0, 124, 124}
+\definecolor{gray10}{gray}{0.1}
+\definecolor{gray20}{gray}{0.2}
+\definecolor{gray30}{gray}{0.3}
+\definecolor{gray40}{gray}{0.4}
+\definecolor{gray60}{gray}{0.6}
+\definecolor{gray70}{gray}{0.7}
+\definecolor{gray80}{gray}{0.8}
+\definecolor{gray90}{gray}{0.9}
+\definecolor{gray95}{gray}{0.95}
+
+\tikzmath{
+  function normal(\x, \m, \s) {
+    return exp(-0.5 * (\x - \m) * (\x - \m) / (\s * \s) ) / (2.506628274631001 * \s);
+  };
+}
+
+\begin{document}
+
+\begin{tikzpicture}[scale=1]
+
+  \begin{scope}[shift={(0, 0)}]
+    \draw[white] (-3.5, -3.5) rectangle (3.5, 0.5);
+  
+    \draw[gray80, dashed, line width=1] (-2, -2) -- (-2, 0);
+    \node[gray80] at (-2, -2.5) { $T_{0}$ };
+    
+    \pgfmathsetmacro{\ti}{0.75}
+    
+    \draw[darkteal, |-, >=stealth, line width=1] (\ti, -1.875) -- (2, -1.875);
+    \draw[lightteal, line width=1, densely dotted] (2, -1.875) -- (2.5, -1.875);
+    
+    \draw[midteal, line width=1, decorate,decoration={brace,amplitude=5pt}] (\ti, -1.7) -- (2, -1.7);
+    \node[midteal] at ({0.5 * (\ti + 2)}, -1.25) { $t_{\min}$ };
+        
+    \node[midteal] at (\ti, -2.5) { $t_{\text{join}}$ };
+    
+    \draw[gray80, dashed, line width=1] (+2, -2) -- (+2, 0);
+    \node[gray80] at (+2, -2.5) { $T_{1}$ };
+  
+
+    \draw [<->, >=stealth, line width=1] (-3.015, -2.00) -- +(6, 0);
+
+    \node at (0, -3) { Time };
+    
+  \end{scope}
+
+\end{tikzpicture}
+
+\end{document}  
