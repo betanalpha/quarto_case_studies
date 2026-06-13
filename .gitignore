@@ -287,3 +287,7 @@ TSWLatexianTemp*
 *.rds
 
 */raw_data
+
+# Python Detritus
+__pycache__
+build
