@@ -36,8 +36,8 @@ parameters {
 
 model {
   // Prior Model
-  // 0 <~ eta <~ 50
-  target += normal_lpdf(eta | 0, 1 / 2.57);
+  // 0 <~ eta <~ 40
+  target += normal_lpdf(eta | 0, 40 / 2.57);
 }
 
 generated quantities {

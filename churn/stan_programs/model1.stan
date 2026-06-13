@@ -46,7 +46,7 @@ transformed parameters {
 model {
   // Prior Model
   // 0 <~ eta <~ 40
-  target += normal_lpdf(eta | 0, 1 / 2.57);
+  target += normal_lpdf(eta | 0, 40 / 2.57);
 
   // Observational Model
   for (n in 1:N_churn) {

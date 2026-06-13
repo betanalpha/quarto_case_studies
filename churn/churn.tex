@@ -187,11 +187,11 @@ Program}
 \maketitle
 \begin{abstract}
 More case studies are available on my
-\href{http://www.symplectomorphic.com/writing/\#\#case-studies}{website}.
+\href{http://www.symplectomorphic.com/writing/\#case-studies}{website}.
 
 A repository containing all of the files used to generate this chapter
 is available on
-\href{https://github.com/betanalpha/quarto_chapters/tree/main/case_studies/churn}{GitHub}.
+\href{https://github.com/betanalpha/quarto_case_studies/tree/main/churn}{GitHub}.
 \end{abstract}
 
 \renewcommand*\contentsname{Table of contents}
@@ -668,9 +668,9 @@ This, in, turn, constrains the reasonable values of \(\gamma\),
 \\
 - \gamma \, 60 \text{ months } &= \log(0.01)
 \\
-\gamma &= - \frac{\log(0.01) }{ 60 \text{ months } }
+\gamma &= - \frac{ \log(0.01) }{ 60 \text{ months } }
 \\
-\gamma &\approx \frac{0.1 }{ \text{ months } }.
+\gamma &\approx 0.075 \frac{ 1 }{ \text{ months } }.
 \end{align*}
 
 As \(\gamma\) increased above this value, the model predicts tenures
@@ -680,13 +680,15 @@ tenures. Overall, we'll need to balance these two extremes behaviors.
 
 Let's give a bit of wiggle room and suppress model configurations with
 \[
-1 \lessapprox \gamma,
+0.025 \frac{ 1 }{ \text{ months } } \lessapprox \gamma,
 \] or, equivalently, \[
-0 \lessapprox \eta = \frac{1}{\gamma} \lessapprox 1.
+0 \text{ months } \lessapprox
+\eta = \frac{1}{\gamma} \lessapprox
+20 \text{ months }.
 \] We can enforce this soft constraint this with a half-normal prior
 model that allocates \(99\%\) of its probability between \(0\) and
-\(1\), \[
-p( \eta ) = \text{half-normal}( \eta \mid 0, 1 / 2.57 ).
+\(40\), \[
+p( \eta ) = \text{half-normal}( \eta \mid 0, 40 / 2.57 ).
 \]
 
 To verify that this prior model behaves as expected, we can perform a
@@ -743,8 +745,8 @@ tenure against our elicited domain expertise.
 
 \KeywordTok{model}\NormalTok{ \{}
   \CommentTok{// Prior Model}
-  \CommentTok{// 0 \textless{}\textasciitilde{} eta \textless{}\textasciitilde{} 50}
-  \KeywordTok{target +=}\NormalTok{ normal\_lpdf(eta | }\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
+  \CommentTok{// 0 \textless{}\textasciitilde{} eta \textless{}\textasciitilde{} 40}
+  \KeywordTok{target +=}\NormalTok{ normal\_lpdf(eta | }\DecValTok{0}\NormalTok{, }\DecValTok{40}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
 \NormalTok{\}}
 
 \KeywordTok{generated quantities}\NormalTok{ \{}
@@ -803,7 +805,11 @@ impossible.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{churn_files/figure-pdf/cell-19-output-1.png}
+\begin{verbatim}
+179867 predictive values (1.76%) fell above the histogram binning.
+\end{verbatim}
+
+\includegraphics{churn_files/figure-pdf/cell-19-output-2.png}
 
 We can also provide a more quantitative check by computing the prior
 predictive tail probability.
@@ -817,7 +823,7 @@ predictive tail probability.
 \end{Shaded}
 
 \begin{verbatim}
-pi( t > 60 ) = 0.000 +/- 0.000
+pi( t > 60 ) = 0.029 +/- 0.002
 \end{verbatim}
 
 This isn't too far from our initial \(1\%\) target!
@@ -896,7 +902,7 @@ a customer stays after joining, \(t_{\text{leave}} - t_{\text{join}}\).}
 \KeywordTok{model}\NormalTok{ \{}
   \CommentTok{// Prior Model}
   \CommentTok{// 0 \textless{}\textasciitilde{} eta \textless{}\textasciitilde{} 40}
-  \KeywordTok{target +=}\NormalTok{ normal\_lpdf(eta | }\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
+  \KeywordTok{target +=}\NormalTok{ normal\_lpdf(eta | }\DecValTok{0}\NormalTok{, }\DecValTok{40}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
 
   \CommentTok{// Observational Model}
   \ControlFlowTok{for}\NormalTok{ (n }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_churn) \{}
@@ -1006,7 +1012,7 @@ smaller tenures more strongly than what we see in the observed data.
 \end{Shaded}
 
 \begin{verbatim}
-25 predictive values (0.00%) fell above the histogram binning.
+55 predictive values (0.00%) fell above the histogram binning.
 \end{verbatim}
 
 \includegraphics{churn_files/figure-pdf/cell-24-output-2.png}
@@ -1034,7 +1040,7 @@ observation period.
 \end{Shaded}
 
 \begin{verbatim}
-2414 predictive values (0.03%) fell above the histogram binning.
+3550 predictive values (0.04%) fell above the histogram binning.
 \end{verbatim}
 
 \includegraphics{churn_files/figure-pdf/cell-25-output-2.png}
@@ -1231,7 +1237,7 @@ implemented with the log survival function.
 \KeywordTok{model}\NormalTok{ \{}
   \CommentTok{// Prior Model}
   \CommentTok{// 0 \textless{}\textasciitilde{} eta \textless{}\textasciitilde{} 40}
-  \KeywordTok{target +=}\NormalTok{ normal\_lpdf(eta | }\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
+  \KeywordTok{target +=}\NormalTok{ normal\_lpdf(eta | }\DecValTok{0}\NormalTok{, }\DecValTok{40}\NormalTok{ / }\FloatTok{2.57}\NormalTok{);}
 
   \CommentTok{// Observational Model}
   \ControlFlowTok{for}\NormalTok{ (n }\ControlFlowTok{in} \DecValTok{1}\NormalTok{:N\_churn) \{}
@@ -1537,7 +1543,9 @@ value will concentrate at tenures that are too long.
 
 Adding a little bit of a buffer, these calculations suggest the
 parameter constraints \[
-0 \lessapprox \sigma \lessapprox 75,
+0 \text{ months } \lessapprox
+\sigma \lessapprox
+75 \text{ months }
 \] and \[
 1 \lessapprox \alpha.
 \] The latter is equivalent to \[
@@ -2628,10 +2636,10 @@ same prior model for \(\alpha\) and \(\sigma\), and then incorporating
 scaling.
 
 That said, the prior predictive tail probabilities are still small
-enough that our prior model is in reasonable agreement with our roughly
+enough that our prior model is in \emph{okay} agreement with our roughly
 elicited tenure thresholds. Besides, we can always introduce a more
 informative prior model, for example narrowing the component prior
-models for \(\alpha\) and \(\sigma\), if needed.
+models for \(\alpha\) and \(\sigma\), later if needed.
 
 \subsection{Posterior Quantification}\label{posterior-quantification-3}
 
@@ -3435,6 +3443,11 @@ we must validate. Once we've invested the time to build an adequate
 model, however, we have access to sophisticated posterior inferences
 than can inform a diversity of important decisions.
 
+\section*{Acknowledgements}\label{acknowledgements}
+\addcontentsline{toc}{section}{Acknowledgements}
+
+I thank jd for helpful comments.
+
 \section*{License}\label{license}
 \addcontentsline{toc}{section}{License}
 
@@ -3460,7 +3473,7 @@ Environment}\label{original-computing-environment}
 \end{Shaded}
 
 \begin{verbatim}
-Last updated: 2026-06-04T12:24:27.075023-04:00
+Last updated: 2026-06-13T15:39:24.963230-04:00
 
 Python implementation: CPython
 Python version       : 3.12.10

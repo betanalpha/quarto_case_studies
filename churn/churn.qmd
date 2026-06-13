@@ -4,9 +4,9 @@ author: "Michael Betancourt"
 date: "May 2026"
 abstract-title: ""
 abstract: |
-  More case studies are available on my [website](http://www.symplectomorphic.com/writing/##case-studies).
+  More case studies are available on my [website](http://www.symplectomorphic.com/writing/#case-studies).
 
-  A repository containing all of the files used to generate this chapter is available on [GitHub](https://github.com/betanalpha/quarto_chapters/tree/main/case_studies/churn).
+  A repository containing all of the files used to generate this chapter is available on [GitHub](https://github.com/betanalpha/quarto_case_studies/tree/main/churn).
 toc: true
 number-sections: true
 highlight: pygments
@@ -495,9 +495,9 @@ This, in, turn, constrains the reasonable values of $\gamma$,
 \\
 - \gamma \, 60 \text{ months } &= \log(0.01)
 \\
-\gamma &= - \frac{\log(0.01) }{ 60 \text{ months } }
+\gamma &= - \frac{ \log(0.01) }{ 60 \text{ months } }
 \\
-\gamma &\approx \frac{0.1 }{ \text{ months } }.
+\gamma &\approx 0.075 \frac{ 1 }{ \text{ months } }.
 \end{align*}
 
 
@@ -510,17 +510,19 @@ these two extremes behaviors.
 Let's give a bit of wiggle room and suppress model configurations
 with
 $$
-1 \lessapprox \gamma,
+0.025 \frac{ 1 }{ \text{ months } } \lessapprox \gamma,
 $$
 or, equivalently,
 $$
-0 \lessapprox \eta = \frac{1}{\gamma} \lessapprox 1.
+0 \text{ months } \lessapprox
+\eta = \frac{1}{\gamma} \lessapprox
+20 \text{ months }.
 $$
 We can enforce this soft constraint this with a half-normal prior
 model that allocates $99\%$ of its probability between $0$ and
-$1$,
+$40$,
 $$
-p( \eta ) = \text{half-normal}( \eta \mid 0, 1 / 2.57 ).
+p( \eta ) = \text{half-normal}( \eta \mid 0, 40 / 2.57 ).
 $$
 
 To verify that this prior model behaves as expected, we can
@@ -1080,7 +1082,9 @@ concentrate at tenures that are too long.
 Adding a little bit of a buffer, these calculations suggest the
 parameter constraints
 $$
-0 \lessapprox \sigma \lessapprox 75,
+0 \text{ months } \lessapprox
+\sigma \lessapprox
+75 \text{ months }
 $$
 and
 $$
@@ -1845,10 +1849,11 @@ incorporating _additional_ variation in the tenure behavior with
 the proportional scaling.
 
 That said, the prior predictive tail probabilities are still
-small enough that our prior model is in reasonable agreement with
+small enough that our prior model is in _okay_ agreement with
 our roughly elicited tenure thresholds.  Besides, we can always
 introduce a more informative prior model, for example narrowing
-the component prior models for $\alpha$ and $\sigma$, if needed.
+the component prior models for $\alpha$ and $\sigma$, later if
+needed.
 
 ## Posterior Quantification
 
@@ -2270,6 +2275,10 @@ modeling assumptions that we must validate.  Once we've invested
 the time to build an adequate model, however, we have access to
 sophisticated posterior inferences than can inform a diversity of
 important decisions.
+
+# Acknowledgements {-}
+
+I thank jd for helpful comments.
 
 # License {-}
 
